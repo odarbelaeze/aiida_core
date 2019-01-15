@@ -1577,18 +1577,17 @@ class TestComputer(AiidaTestCase):
         import shutil
         import tempfile
 
-        from aiida.orm.importexport import export
-        # from aiida.orm.querybuilder import QueryBuilder
-        # from aiida.orm.computers import Computer
-        from aiida.orm.node.process import CalculationNode
-
         from aiida.orm import load_node
+        from aiida.orm.importexport import export
+        from aiida.orm.node.process import CalculationNode
 
         # Test content
         test_comments = [
-            "This is a test of a comment",
-            "Another test comment",
-            "Yet another test comment"
+            ["This is a test of a comment"],
+            ["Another test comment"],
+            ["Yet another test comment"],
+            ["This is the first in a list of comments",
+            "This is the second in the list of comments"]
         ]
 
         # Create temporary folders for the import/export files
@@ -1598,23 +1597,29 @@ class TestComputer(AiidaTestCase):
         try:
             # Create comment calc nodes
             nodes = []
-            for comment in test_comments:
+            for comment_lists in test_comments:
                 node = CalculationNode().store()
-                node.add_comment(comment)
+                for comment in comment_lists:
+                    node.add_comment(comment)
                 nodes.append(node)
+            
+            # Collect uuids for created nodes
             uuids = [n.uuid for n in nodes]
             
             # Export nodes
             filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
             export(nodes, outfile=filename, silent=True)
 
-            # Clean the database and reimport data
+            # Clean the database
             self.clean_db()
+
+            # Import nodes again
             import_data(filename, silent=True)
 
-            # Check whether extra values are preserved
+            # Check whether comments are preserved
             for uuid, refval in zip(uuids, test_comments):
-                self.assertEquals(load_node(uuid).get_comments(), refval)
+                comments = [n.content for n in load_node(uuid).get_comments()]
+                self.assertEquals(comments, refval)
         finally:
             # Deleting the created temporary folders
             shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
@@ -1628,19 +1633,16 @@ class TestComputer(AiidaTestCase):
         import shutil
         import tempfile
 
+        from aiida.orm import load_node
         from aiida.orm.importexport import export
-        # from aiida.orm.querybuilder import QueryBuilder
-        # from aiida.orm.computers import Computer
         from aiida.orm.node.process import CalculationNode
 
-        from aiida.orm import load_node
-        
         # Test content
         test_extra = [
-            ("test_key", "test_value"),
-            ("test_key2", 2),
-            ("test_key3", "False"),
-            ("test_key4", 2.8947833e12)
+            {"test_key": "test_value"},
+            {"test_key2": 2},
+            {"test_key3": False},
+            {"test_key4": 2.8947833e12}
         ]
 
         # Create temporary folders for the import/export files
@@ -1650,9 +1652,10 @@ class TestComputer(AiidaTestCase):
         try:
             # Create extra nodes
             nodes = []
-            for (k, v) in test_extra:
+            for extra in test_extra:
                 node = CalculationNode().store()
-                node.set_extra(k, v)
+                for k, v in extra.items():
+                    node.set_extra(k, v)
                 nodes.append(node)
             
             # Collect uuids for created nodes
@@ -1662,13 +1665,15 @@ class TestComputer(AiidaTestCase):
             filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
             export(nodes, outfile=filename, silent=True)
 
-            # Clean the database and reimport data
+            # Clean the database
             self.clean_db()
+
+            # Import nodes again
             import_data(filename, silent=True)
 
             # Check whether extra values are preserved
             for uuid, refval in zip(uuids, test_extra):
-                self.assertEquals(load_node(uuid).get_extras(), refval)
+                self.assertDictContainsSubset(refval, load_node(uuid).get_extras())
         finally:
             # Deleting the created temporary folders
             shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
