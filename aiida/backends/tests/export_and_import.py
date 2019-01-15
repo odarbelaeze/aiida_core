@@ -1020,9 +1020,159 @@ class TestSimple(AiidaTestCase):
             # Deleting the created temporary folder
             shutil.rmtree(temp_folder, ignore_errors=True)
 
-    def test_base_data_type_strings(self):
-        pass
+    def test_db_schema_changes_v04(self):
+        """
+        Check changes in database schema after upgrading to v0.4.
+        This includes all migrations from "base_data_plugin_type_string" (django: 0008)
+        until "dbgroup_type_string_change_content" (django: 0022), both included.
+
+        NB! This test ONLY includes tests for migrations (defined here from django number):
+            0009, 0010, 0016, 0017, 0018, 0019
+            provenance redesign changes are tested in test_db_schema_provenance_redesign.
+        
+        0009: Change type of base data types
+
+        NOT YET IMPLEMENTED IN TEST:
+        0010: Added process_type column to dbnode table
+        0016: Change type of Code class in db_dbnode table
+        0017: Drop table DbCalcState
+        0018: Uniqueness for uuid and email and native UUIDField in dbcomment, dbcomputer, dbgroup, dbworkflow
+        0019: Remove 'simpleplugins' in process_type and type columns of db_dbnode table
+        """
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm import load_node
+        from aiida.orm.importexport import export
+
+        from aiida.orm.data.str import Str
+        from aiida.orm.data.int import Int
+        from aiida.orm.data.float import Float
+        from aiida.orm.data.bool import Bool
+        from aiida.orm.data.list import List
+
+        # Test content
+        test_content = ("Hello", 6, -1.2399834e12, False)
+        test_types = ()
+        for node_type in ["str", "int", "float", "bool"]:
+            add_type = ('data.{}.{}.'.format(node_type, node_type.capitalize()),)
+            test_types = test_types.__add__(add_type)
+
+        # Create temporary folders for the import/export files
+        export_file_tmp_folder = tempfile.mkdtemp()
+
+        try:
+            # List of nodes to be exported
+            export_nodes = []
+
+            # Create list of base type nodes
+            nodes = [cls(val).store() for val, cls in zip(test_content, (Str, Int, Float, Bool))]
+            export_nodes.extend(nodes)
+            
+            # Collect uuids for created nodes
+            uuids = [n.uuid for n in nodes]
+            
+            # Create List() and insert already created nodes into it
+            list_node = List()
+            list_node.set_list(nodes)
+            list_node.store()
+            export_nodes.append(list_node)
+
+            # Export nodes
+            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
+            export(export_nodes, outfile=filename, silent=True)
+
+            # Clean the database
+            self.clean_db()
+
+            # Import nodes again
+            import_data(filename, silent=True)
+
+            # Check whether types are correctly imported
+            nlist = load_node(list_node.uuid)  # List
+            for uuid, list_value, refval, reftype in zip(uuids, nlist.get_list(), test_content, test_types):
+                # Str, Int, Float, Bool
+                n = load_node(uuid)
+                # Check value/content
+                self.assertEqual(n.value, refval)
+                # Check type
+                msg = "type of node ('{}') is not updated according to db schema v0.4".format(n.type)
+                self.assertEqual(n.type, reftype, msg=msg)
+
+                # List
+                # Check value
+                self.assertEqual(list_value, refval)
+            
+            # Check List type
+            msg = "type of node ('{}') is not updated according to db schema v0.4".format(nlist.type)
+            self.assertEqual(nlist.type, 'data.list.List.', msg=msg)
+            
+        finally:
+            # Deleting the created temporary folders
+            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
     
+    def test_db_schema_provenance_redesign(self):
+        """
+        Check changes in database schema after provenance redesign.
+        This includes all migrations from "base_data_plugin_type_string" (django: 0008)
+        until "dbgroup_type_string_change_content" (django: 0022), both included.
+
+        NB! This test ONLY includes tests for provenance redesign migrations (defined here from django number):
+            0020, 0021, 0022
+            previous migrations are tested in test_db_schema_changes_v04.
+        
+        0020: Provenance redesign.
+                - Inferring process_type
+                - Update link types
+        0021: Rename columns: 'name' and 'type' in db_group table to 'label' and 'type_string', respectively
+        0022: Update content of type_string column in db_dbgroup table
+        """
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm import load_node
+        from aiida.orm.importexport import export
+
+        from aiida.orm.node.process import CalcJobNode
+        from aiida.orm import Code
+
+        # Create temporary folders for the import/export files
+        export_file_tmp_folder = tempfile.mkdtemp()
+
+        try:
+            ## Create nodes
+            # Code
+            code_label = 'test_code1'
+
+            code = Code()
+            code.set_remote_computer_exec((self.computer, '/bin/true'))
+            code.label = code_label
+            code.store()
+
+            code_uuid = code.uuid
+
+            # Calculation
+            calc = CalcJobNode()
+            calc.set_computer(self.computer)
+            calc.set_option('resources',{"num_machines": 1, "num_mpiprocs_per_machine": 1})
+            calc.store()
+            calc.set_op
+
+            # Export nodes
+            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
+            export([calc], outfile=filename, silent=True)
+
+            # Clean the database and reload
+            self.clean_db()
+            import_data(filename, silent=True)
+
+            # Check 
+        finally:
+            # Deleting the created temporary folders
+            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
+
     def test_node_comments(self):
         """
         This test checks that node comments are exported and imported correctly.
@@ -1046,7 +1196,6 @@ class TestSimple(AiidaTestCase):
 
         # Create temporary folders for the import/export files
         export_file_tmp_folder = tempfile.mkdtemp()
-        unpack_tmp_folder = tempfile.mkdtemp()
 
         try:
             # Create comment calc nodes
@@ -1073,11 +1222,10 @@ class TestSimple(AiidaTestCase):
             # Check whether comments are preserved
             for uuid, refval in zip(uuids, test_comments):
                 comments = [n.content for n in load_node(uuid).get_comments()]
-                self.assertEquals(comments, refval)
+                self.assertListEqual(comments, refval)
         finally:
             # Deleting the created temporary folders
             shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
-            shutil.rmtree(unpack_tmp_folder, ignore_errors=True)
 
     def test_node_extras(self):
         """
@@ -1101,7 +1249,6 @@ class TestSimple(AiidaTestCase):
 
         # Create temporary folders for the import/export files
         export_file_tmp_folder = tempfile.mkdtemp()
-        unpack_tmp_folder = tempfile.mkdtemp()
 
         try:
             # Create extra nodes
@@ -1131,7 +1278,6 @@ class TestSimple(AiidaTestCase):
         finally:
             # Deleting the created temporary folders
             shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
-            shutil.rmtree(unpack_tmp_folder, ignore_errors=True)
 
 
 class TestComplex(AiidaTestCase):
