@@ -1529,7 +1529,7 @@ class TestComputer(AiidaTestCase):
             shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
             shutil.rmtree(unpack_tmp_folder, ignore_errors=True)
 
-    @unittest.skip('reenable when issue #2342 is addressed')
+    # @unittest.skip('reenable when issue #2342 is addressed')
     def test_import_of_django_sqla_export_file(self):
         """
         Check why sqla import manages to import the django export file correctly
@@ -1565,6 +1565,114 @@ class TestComputer(AiidaTestCase):
 
             self.assertEqual(res['comp']['transport_params'], comp1_transport_params)
             self.assertEqual(res['comp']['_metadata'], comp1_metadata)
+
+    def test_base_data_type_strings(self):
+        pass
+    
+    def test_node_comments(self):
+        """
+        This test checks that node comments are exported and imported correctly.
+        """
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm.importexport import export
+        # from aiida.orm.querybuilder import QueryBuilder
+        # from aiida.orm.computers import Computer
+        from aiida.orm.node.process import CalculationNode
+
+        from aiida.orm import load_node
+
+        # Test content
+        test_comments = [
+            "This is a test of a comment",
+            "Another test comment",
+            "Yet another test comment"
+        ]
+
+        # Create temporary folders for the import/export files
+        export_file_tmp_folder = tempfile.mkdtemp()
+        unpack_tmp_folder = tempfile.mkdtemp()
+
+        try:
+            # Create comment calc nodes
+            nodes = []
+            for comment in test_comments:
+                node = CalculationNode().store()
+                node.add_comment(comment)
+                nodes.append(node)
+            uuids = [n.uuid for n in nodes]
+            
+            # Export nodes
+            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
+            export(nodes, outfile=filename, silent=True)
+
+            # Clean the database and reimport data
+            self.clean_db()
+            import_data(filename, silent=True)
+
+            # Check whether extra values are preserved
+            for uuid, refval in zip(uuids, test_comments):
+                self.assertEquals(load_node(uuid).get_comments(), refval)
+        finally:
+            # Deleting the created temporary folders
+            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
+            shutil.rmtree(unpack_tmp_folder, ignore_errors=True)
+
+    def test_node_extras(self):
+        """
+        This test checks that node extras are exported and imported correctly.
+        """
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm.importexport import export
+        # from aiida.orm.querybuilder import QueryBuilder
+        # from aiida.orm.computers import Computer
+        from aiida.orm.node.process import CalculationNode
+
+        from aiida.orm import load_node
+        
+        # Test content
+        test_extra = [
+            ("test_key", "test_value"),
+            ("test_key2", 2),
+            ("test_key3", "False"),
+            ("test_key4", 2.8947833e12)
+        ]
+
+        # Create temporary folders for the import/export files
+        export_file_tmp_folder = tempfile.mkdtemp()
+        unpack_tmp_folder = tempfile.mkdtemp()
+
+        try:
+            # Create extra nodes
+            nodes = []
+            for (k, v) in test_extra:
+                node = CalculationNode().store()
+                node.set_extra(k, v)
+                nodes.append(node)
+            
+            # Collect uuids for created nodes
+            uuids = [n.uuid for n in nodes]
+            
+            # Export nodes
+            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
+            export(nodes, outfile=filename, silent=True)
+
+            # Clean the database and reimport data
+            self.clean_db()
+            import_data(filename, silent=True)
+
+            # Check whether extra values are preserved
+            for uuid, refval in zip(uuids, test_extra):
+                self.assertEquals(load_node(uuid).get_extras(), refval)
+        finally:
+            # Deleting the created temporary folders
+            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
+            shutil.rmtree(unpack_tmp_folder, ignore_errors=True)
 
 
 class TestLinks(AiidaTestCase):
