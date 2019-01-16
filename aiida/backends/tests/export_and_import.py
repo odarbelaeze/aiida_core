@@ -2040,167 +2040,6 @@ class TestLinks(AiidaTestCase):
             finally:
                 shutil.rmtree(tmp_folder, ignore_errors=True)
 
-    def test_recursive_export_input_and_create_links_proper(self):
-        """
-        Check that CALL, INPUT, RETURN and CREATE links are followed
-        recursively.
-        """
-        import os, shutil, tempfile
-        from aiida.orm import Node
-        from aiida.orm.data.base import Int
-        from aiida.orm.importexport import export
-        from aiida.orm.node import CalculationNode, WorkflowNode
-        from aiida.common.links import LinkType
-        from aiida.orm.querybuilder import QueryBuilder
-
-        tmp_folder = tempfile.mkdtemp()
-
-        try:
-            w1 = WorkflowNode().store()
-            w2 = WorkflowNode().store()
-            c1 = CalculationNode().store()
-            ni1 = Int(1).store()
-            ni2 = Int(2).store()
-            no1 = Int(1).store()
-            no2 = Int(2).store()
-
-            # Create the connections between workcalculations and calculations
-            w1.add_incoming(w2, LinkType.CALL_WORK, 'call')
-            c1.add_incoming(w1, LinkType.CALL_CALC, 'call')
-
-            # Connect the first data node to w1 & c1
-            w1.add_incoming(ni1, LinkType.INPUT_WORK, 'ni1-to-w1')
-            c1.add_incoming(ni1, LinkType.INPUT_CALC, 'ni1-to-c1')
-
-            # Connect the second data node to w1 & c1
-            w1.add_incoming(ni2, LinkType.INPUT_WORK, 'ni2-to-w1')
-            c1.add_incoming(ni2, LinkType.INPUT_CALC, 'ni2-to-c1')
-
-            # Connecting the first output node to w1 & c1
-            no1.add_incoming(w1, LinkType.RETURN, 'output1')
-            no1.add_incoming(c1, LinkType.CREATE, 'output1')
-
-            # Connecting the second output node to w1 & c1
-            no2.add_incoming(w1, LinkType.RETURN, 'output2')
-            no2.add_incoming(c1, LinkType.CREATE, 'output2')
-
-            # Getting the input, create, return and call links
-            qb = QueryBuilder()
-            qb.append(Node, project='uuid')
-            qb.append(Node, project='uuid',
-                      edge_project=['label', 'type'],
-                      edge_filters={'type': {'in': (LinkType.INPUT_CALC.value,
-                                                    LinkType.INPUT_WORK.value,
-                                                    LinkType.CREATE.value,
-                                                    LinkType.RETURN.value,
-                                                    LinkType.CALL_CALC.value,
-                                                    LinkType.CALL_WORK.value)}})
-            export_links = qb.all()
-
-            export_file = os.path.join(tmp_folder, 'export.tar.gz')
-            export([w2], outfile=export_file, silent=True)
-
-            self.reset_database()
-
-            import_data(export_file, silent=True)
-            import_links = self.get_all_node_links()
-
-            export_set = [tuple(_) for _ in export_links]
-            import_set = [tuple(_) for _ in import_links]
-
-            self.assertSetEqual(set(export_set), set(import_set))
-        finally:
-            shutil.rmtree(tmp_folder, ignore_errors=True)
-
-    def test_provenance_redesign_links(self):
-        """
-        Check that CALL, INPUT, RETURN and CREATE links are followed recursively.
-
-        Provenance redesign graph in Figure 5:
-        https://aiida-core.readthedocs.io/en/provenance_redesign/concepts/provenance.html
-        with the addition of a second workflow, W_2, called by W_1.
-        W_2 will call C_1 (add) instead of W_1.
-        D_1 (a) and D_2 (b) therefore need to additionally be inputs to W_2.
-        This is done to include a CALL_WORK link type.
-        """
-        import os, shutil, tempfile
-        from aiida.orm import Node
-        from aiida.orm.data.base import Int
-        from aiida.orm.importexport import export
-        from aiida.orm.node.process import CalculationNode, WorkflowNode
-        from aiida.common.links import LinkType
-        from aiida.orm.querybuilder import QueryBuilder
-
-        tmp_folder = tempfile.mkdtemp()
-
-        try:
-            # Create nodes
-            w1 = WorkflowNode().store()     # W_1
-            w2 = WorkflowNode().store()     # W_2
-            c1 = CalculationNode().store()  # C_1 (add)
-            c2 = CalculationNode().store()  # C_2 (multiply)
-            d1 = Int(1).store()             # D_1 (a) - here: 1
-            d2 = Int(2).store()             # D_2 (b) - here: 2
-            d3 = Int(3).store()             # D_3 (c) - here: 3
-            d4 = Int(3).store()             # D_4 (sum) - here: D_1 + D_2 =  1 + 2 = 3
-            d5 = Int(9).store()             # D_5 (result) - here: D_4 * D_3 = 3 * 3 = 9
-
-            # Connect the (org) input data nodes: D_1, D_2, and D_3 to first Workflow
-            w1.add_incoming(d1, LinkType.INPUT_WORK, 'input_d1-a_to_w1')
-            w1.add_incoming(d2, LinkType.INPUT_WORK, 'input_d2-b_to_w1')
-            w1.add_incoming(d3, LinkType.INPUT_WORK, 'input_d3-c_to_w1')
-
-            # Create first Workflow calls
-            w2.add_incoming(w1, LinkType.CALL_WORK, 'call_w2_from_w1')
-            c1.add_incoming(w2, LinkType.CALL_CALC, 'call_c1-add_from_w2')
-
-            # Connect input data associated with first Workflow calls
-            w2.add_incoming(d1, LinkType.INPUT_WORK, 'input_d1-a_to_w2')
-            w2.add_incoming(d2, LinkType.INPUT_WORK, 'input_d2-b_to_w2')
-            c1.add_incoming(d1, LinkType.INPUT_CALC, 'input_d1-a_to_c1-add')
-            c1.add_incoming(d2, LinkType.INPUT_CALC, 'input_d2-b_to_c1-add')
-
-            # Connect output of C_1 (add)
-            d4.add_incoming(c1, LinkType.CREATE, 'create_d4-sum_from_c1-add')
-
-            # Connect C_2 (multiply) with input nodes ( D_3 (c) and D_4 (sum) )
-            # and call from W_1
-            c2.add_incoming(w1, LinkType.CALL_CALC, 'call_c2-multiply_from_w1')
-            c2.add_incoming(d3, LinkType.INPUT_CALC, 'input_d3-c_to_c2-multiply')
-            c2.add_incoming(d4, LinkType.INPUT_CALC, 'input_d4-sum_to_c2-multiply')
-
-            # Create output connections for final data node
-            d5.add_incoming(c2, LinkType.CREATE, 'create_d5-result_from_c2-multiply')
-            d5.add_incoming(w1, LinkType.RETURN, 'return_d5-result_from_w1')
-
-            # Getting the input, create, return and call links
-            qb = QueryBuilder()
-            qb.append(Node, project='uuid')
-            qb.append(Node, project='uuid',
-                      edge_project=['label', 'type'],
-                      edge_filters={'type': {'in': (LinkType.INPUT_CALC.value,
-                                                    LinkType.INPUT_WORK.value,
-                                                    LinkType.CREATE.value,
-                                                    LinkType.RETURN.value,
-                                                    LinkType.CALL_CALC.value,
-                                                    LinkType.CALL_WORK.value)}})
-            export_links = qb.all()
-
-            export_file = os.path.join(tmp_folder, 'export.tar.gz')
-            export([w1], outfile=export_file, silent=True)
-
-            self.reset_database()
-
-            import_data(export_file, silent=True)
-            import_links = self.get_all_node_links()
-
-            export_set = [tuple(_) for _ in export_links]
-            import_set = [tuple(_) for _ in import_links]
-
-            self.assertSetEqual(set(export_set), set(import_set))
-        finally:
-            shutil.rmtree(tmp_folder, ignore_errors=True)
-
     def test_links_for_workflows(self):
         """
         Check that CALL links are not followed in the export procedure, and the only creation
@@ -2223,27 +2062,28 @@ class TestLinks(AiidaTestCase):
         from aiida.orm import Node, Data
         from aiida.orm.data.base import Int
         from aiida.orm.importexport import export
-        from aiida.orm.node import WorkChainNode
+        from aiida.orm.node.process import WorkflowNode
         from aiida.common.links import LinkType
         from aiida.orm.querybuilder import QueryBuilder
 
         tmp_folder = tempfile.mkdtemp()
 
         try:
-            w1 = WorkChainNode().store()
-            w2 = WorkChainNode().store()
+            w1 = WorkflowNode().store()
+            w2 = WorkflowNode().store()
             i1 = Int(1).store()
             o1 = Int(2).store()
 
             w1.add_incoming(i1, LinkType.INPUT_WORK, 'input-i1')
             w1.add_incoming(w2, LinkType.CALL_WORK, 'call')
             o1.add_incoming(w1, LinkType.RETURN, 'return')
-
-            links_wanted = [l for l in self.get_all_node_links() if l[3] in
-                            # (LinkType.CREATE.value,  # Workflows do not CREATE, only RETURN
-                             (LinkType.INPUT_WORK.value,
-                             LinkType.RETURN.value)]
-            export_set = [tuple(_) for _ in links_wanted]
+            
+            links_count_wanted = 2  # All 3 links, except CALL links (the CALL_WORK)
+            links_wanted = [l for l in self.get_all_node_links() if l[3] not in
+                            (LinkType.CALL_WORK.value,
+                            LinkType.CALL_CALC.value)]
+            # Check all links except CALL links are retrieved
+            self.assertEqual(links_count_wanted, len(links_wanted))
 
             export_file_1 = os.path.join(tmp_folder, 'export-1.tar.gz')
             export_file_2 = os.path.join(tmp_folder, 'export-2.tar.gz')
@@ -2254,17 +2094,15 @@ class TestLinks(AiidaTestCase):
 
             import_data(export_file_1, silent=True)
             import_links = self.get_all_node_links()
-            import_set = [tuple(_) for _ in import_links]
 
-            # self.assertListEqual(sorted(links_wanted), sorted(links_in_db))
-            self.assertSetEqual(set(export_set), set(import_set))
+            self.assertListEqual(sorted(links_wanted), sorted(import_links))
+            self.assertEqual(links_count_wanted, len(import_links))
             self.reset_database()
 
             import_data(export_file_2, silent=True)
             import_links = self.get_all_node_links()
-            import_set = [tuple(_) for _ in import_links]
-            # self.assertListEqual(sorted(links_wanted), sorted(links_in_db))
-            self.assertSetEqual(set(export_set), set(import_set))
+            self.assertListEqual(sorted(links_wanted), sorted(import_links))
+            self.assertEqual(links_count_wanted, len(import_links))
 
         finally:
             shutil.rmtree(tmp_folder, ignore_errors=True)
