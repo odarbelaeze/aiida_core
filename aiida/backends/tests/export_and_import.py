@@ -1111,67 +1111,6 @@ class TestSimple(AiidaTestCase):
         finally:
             # Deleting the created temporary folders
             shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
-    
-    def test_db_schema_provenance_redesign(self):
-        """
-        Check changes in database schema after provenance redesign.
-        This includes all migrations from "base_data_plugin_type_string" (django: 0008)
-        until "dbgroup_type_string_change_content" (django: 0022), both included.
-
-        NB! This test ONLY includes tests for provenance redesign migrations (defined here from django number):
-            0020, 0021, 0022
-            previous migrations are tested in test_db_schema_changes_v04.
-        
-        0020: Provenance redesign.
-                - Inferring process_type
-                - Update link types
-        0021: Rename columns: 'name' and 'type' in db_group table to 'label' and 'type_string', respectively
-        0022: Update content of type_string column in db_dbgroup table
-        """
-        import os
-        import shutil
-        import tempfile
-
-        from aiida.orm import load_node
-        from aiida.orm.importexport import export
-
-        from aiida.orm.node.process import CalcJobNode
-        from aiida.orm import Code
-
-        # Create temporary folders for the import/export files
-        export_file_tmp_folder = tempfile.mkdtemp()
-
-        try:
-            ## Create nodes
-            # Code
-            code_label = 'test_code1'
-
-            code = Code()
-            code.set_remote_computer_exec((self.computer, '/bin/true'))
-            code.label = code_label
-            code.store()
-
-            code_uuid = code.uuid
-
-            # Calculation
-            calc = CalcJobNode()
-            calc.set_computer(self.computer)
-            calc.set_option('resources',{"num_machines": 1, "num_mpiprocs_per_machine": 1})
-            calc.store()
-            calc.set_op
-
-            # Export nodes
-            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
-            export([calc], outfile=filename, silent=True)
-
-            # Clean the database and reload
-            self.clean_db()
-            import_data(filename, silent=True)
-
-            # Check 
-        finally:
-            # Deleting the created temporary folders
-            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
 
     def test_node_comments(self):
         """
@@ -2155,6 +2094,94 @@ class TestLinks(AiidaTestCase):
 
             export_file = os.path.join(tmp_folder, 'export.tar.gz')
             export([wc2], outfile=export_file, silent=True)
+
+            self.reset_database()
+
+            import_data(export_file, silent=True)
+            import_links = self.get_all_node_links()
+
+            export_set = [tuple(_) for _ in export_links]
+            import_set = [tuple(_) for _ in import_links]
+
+            self.assertEquals(set(export_set), set(import_set))
+        finally:
+            shutil.rmtree(tmp_folder, ignore_errors=True)
+
+    def test_provenance_redesign_links(self):
+        """
+        Check that CALL, INPUT, RETURN and CREATE links are followed recursively.
+
+        Provenance redesign graph in Figure 5:
+        https://aiida-core.readthedocs.io/en/provenance_redesign/concepts/provenance.html
+        with the addition of a second workflow, W_2, called by W_1.
+        W_2 will call C_1 (add) instead of W_1.
+        D_1 (a) and D_2 (b) therefore need to additionally be inputs to W_2.
+        This is done to include a CALL_WORK link type.
+        """
+        import os, shutil, tempfile
+        from aiida.orm import Node
+        from aiida.orm.data.base import Int
+        from aiida.orm.importexport import export
+        from aiida.orm.node.process import CalculationNode, WorkflowNode
+        from aiida.common.links import LinkType
+        from aiida.orm.querybuilder import QueryBuilder
+        tmp_folder = tempfile.mkdtemp()
+
+        try:
+            # Create nodes
+            w1 = WorkflowNode().store()     # W_1
+            w2 = WorkflowNode().store()     # W_2
+            c1 = CalculationNode().store()  # C_1 (add)
+            c2 = CalculationNode().store()  # C_2 (multiply)
+            d1 = Int(1).store()             # D_1 (a) - here: 1
+            d2 = Int(2).store()             # D_2 (b) - here: 2
+            d3 = Int(3).store()             # D_3 (c) - here: 3
+            d4 = Int(3).store()             # D_4 (sum) - here: D_1 + D_2 =  1 + 2 = 3
+            d5 = Int(9).store()             # D_5 (result) - here: D_4 * D_3 = 3 * 3 = 9
+
+            # Connect the (org) input data nodes: D_1, D_2, and D_3 to first Workflow
+            w1.add_incoming(d1, LinkType.INPUT_WORK, 'input_d1-a_to_w1')
+            w1.add_incoming(d2, LinkType.INPUT_WORK, 'input_d2-b_to_w1')
+            w1.add_incoming(d3, LinkType.INPUT_WORK, 'input_d3-c_to_w1')
+
+            # Create first Workflow calls
+            w2.add_incoming(w1, LinkType.CALL_WORK, 'call_w2_from_w1')
+            c1.add_incoming(w2, LinkType.CALL_CALC, 'call_c1-add_from_w2')
+
+            # Connect input data associated with first Workflow calls
+            w2.add_incoming(d1, LinkType.INPUT_WORK, 'input_d1-a_to_w2')
+            w2.add_incoming(d2, LinkType.INPUT_WORK, 'input_d2-b_to_w2')
+            c1.add_incoming(d1, LinkType.INPUT_CALC, 'input_d1-a_to_c1-add')
+            c1.add_incoming(d2, LinkType.INPUT_CALC, 'input_d2-b_to_c1-add')
+
+            # Connect output of C_1 (add)
+            d4.add_incoming(c1, LinkType.CREATE, 'create_d4-sum_from_c1-add')
+
+            # Connect C_2 (multiply) with input nodes ( D_3 (c) and D_4 (sum) )
+            # and call from W_1
+            c2.add_incoming(w1, LinkType.CALL_CALC, 'call_c2-multiply_from_w1')
+            c2.add_incoming(d3, LinkType.INPUT_CALC, 'input_d3-c_to_c2-multiply')
+            c2.add_incoming(d4, LinkType.INPUT_CALC, 'input_d4-sum_to_c2-multiply')
+
+            # Create output connections for final data node
+            d5.add_incoming(c2, LinkType.CREATE, 'create_d5-result_from_c2-multiply')
+            d5.add_incoming(w1, LinkType.RETURN, 'return_d5-result_from_w1')
+
+            # Getting the input, create, return and call links
+            qb = QueryBuilder()
+            qb.append(Node, project='uuid')
+            qb.append(Node, project='uuid',
+                      edge_project=['label', 'type'],
+                      edge_filters={'type': {'in': (LinkType.INPUT_CALC.value,
+                                                    LinkType.INPUT_WORK.value,
+                                                    LinkType.CREATE.value,
+                                                    LinkType.RETURN.value,
+                                                    LinkType.CALL_CALC.value,
+                                                    LinkType.CALL_WORK.value)}})
+            export_links = qb.all()
+
+            export_file = os.path.join(tmp_folder, 'export.tar.gz')
+            export([w1], outfile=export_file, silent=True)
 
             self.reset_database()
 
