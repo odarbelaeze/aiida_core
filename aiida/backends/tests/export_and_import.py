@@ -1832,7 +1832,7 @@ class TestLinks(AiidaTestCase):
         from aiida.orm.node import WorkChainNode
         from aiida.common.links import LinkType
 
-        if export_combination < 0 or export_combination > 8:
+        if export_combination < 0 or export_combination > 9:
             return None
 
         # Node creation
@@ -1883,7 +1883,7 @@ class TestLinks(AiidaTestCase):
 
         # Create various combinations of nodes that should be exported
         # and the final set of nodes that are exported in each case, following
-        # predecessor/successor links.
+        # predecessor(INPUT, CREATE)/successor(CALL, RETURN, CREATE) links.
         export_list = [
             (wc1, [d1, d2, d3, d4, pw1, wc1, wc2]),
             (wc2, [d1, d3, d4, pw1, wc2]),
@@ -1891,6 +1891,7 @@ class TestLinks(AiidaTestCase):
             (d4, [d1, d3, d4, pw1]),
             (d5, [d1, d3, d4, d5, d6, pw1, pw2]),
             (d6, [d1, d3, d4, d5, d6, pw1, pw2]),
+            (pw1, [d1, d3, d4, pw1]),
             (pw2, [d1, d3, d4, d5, d6, pw1, pw2]),
             (d1, [d1]),
             (d2, [d2])
@@ -1997,8 +1998,9 @@ class TestLinks(AiidaTestCase):
         from aiida.orm.importexport import export
         from aiida.orm.querybuilder import QueryBuilder
         from aiida.orm import Node
+        from aiida.orm.utils import load_node
 
-        for export_conf in range(0, 8):
+        for export_conf in range(0, 9):
 
             graph_nodes, (export_node, export_target) = (
                 self.construct_complex_graph(export_conf))
@@ -2020,7 +2022,6 @@ class TestLinks(AiidaTestCase):
 
                 export_target_uuids = set(str(_.uuid) for _ in export_target)
 
-                from aiida.orm.utils import load_node
                 self.assertEquals(
                     export_target_uuids,
                     imported_node_uuids,
