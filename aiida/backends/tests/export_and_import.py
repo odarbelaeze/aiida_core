@@ -1828,8 +1828,9 @@ class TestLinks(AiidaTestCase):
         predecessors, desuccessors).
         """
         from aiida.orm.data.base import Int
-        from aiida.orm.node import CalcJobNode
-        from aiida.orm.node import WorkChainNode
+        from aiida.orm.node.process import CalculationNode
+        from aiida.orm.node.process import WorkflowNode
+        from aiida.common.datastructures import calc_states
         from aiida.common.links import LinkType
 
         if export_combination < 0 or export_combination > 9:
@@ -1838,61 +1839,63 @@ class TestLinks(AiidaTestCase):
         # Node creation
         d1 = Int(1).store()
         d2 = Int(1).store()
-        wc1 = WorkChainNode().store()
-        wc2 = WorkChainNode().store()
+        w1 = WorkflowNode().store()
+        w2 = WorkflowNode().store()
 
-        pw1 = CalcJobNode()
-        pw1.set_computer(self.computer)
-        pw1.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
-        pw1.store()
+        c1 = CalculationNode()
+        c1.set_computer(self.computer)
+        # c1.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
+        c1.store()
 
         d3 = Int(1).store()
         d4 = Int(1).store()
 
-        pw2 = CalcJobNode()
-        pw2.set_computer(self.computer)
-        pw2.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
-        pw2.store()
+        c2 = CalculationNode()
+        c2.set_computer(self.computer)
+        # c2.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
+        c2.store()
 
         d5 = Int(1).store()
         d6 = Int(1).store()
 
         # Link creation
-        wc1.add_incoming(d1, LinkType.INPUT_WORK, 'input1')
-        wc1.add_incoming(d2, LinkType.INPUT_WORK, 'input2')
+        w1.add_incoming(d1, LinkType.INPUT_WORK, 'input1')
+        w1.add_incoming(d2, LinkType.INPUT_WORK, 'input2')
 
-        wc2.add_incoming(d1, LinkType.INPUT_WORK, 'input')
-        wc2.add_incoming(wc1, LinkType.CALL_WORK, 'call')
+        w2.add_incoming(d1, LinkType.INPUT_WORK, 'input')
+        w2.add_incoming(w1, LinkType.CALL_WORK, 'call')
 
-        pw1.add_incoming(d1, LinkType.INPUT_CALC, 'input')
-        pw1.add_incoming(wc2, LinkType.CALL_CALC, 'call')
+        c1.add_incoming(d1, LinkType.INPUT_CALC, 'input')
+        c1.add_incoming(w2, LinkType.CALL_CALC, 'call')
+        c1._set_process_state(calc_states.PARSING)
 
-        d3.add_incoming(pw1, LinkType.CREATE, 'create1')
-        d3.add_incoming(wc2, LinkType.RETURN, 'return1')
+        d3.add_incoming(c1, LinkType.CREATE, 'create1')
+        d3.add_incoming(w2, LinkType.RETURN, 'return1')
 
-        d4.add_incoming(pw1, LinkType.CREATE, 'create2')
-        d4.add_incoming(wc2, LinkType.RETURN, 'return2')
+        d4.add_incoming(c1, LinkType.CREATE, 'create2')
+        d4.add_incoming(w2, LinkType.RETURN, 'return2')
 
-        pw2.add_incoming(d4, LinkType.INPUT_CALC, 'input')
+        c2.add_incoming(d4, LinkType.INPUT_CALC, 'input')
+        c2._set_process_state(calc_states.PARSING)
 
-        d5.add_incoming(pw2, LinkType.CREATE, 'create5')
-        d6.add_incoming(pw2, LinkType.CREATE, 'create6')
+        d5.add_incoming(c2, LinkType.CREATE, 'create5')
+        d6.add_incoming(c2, LinkType.CREATE, 'create6')
 
         # Return the generated nodes
-        graph_nodes = [d1, d2, d3, d4, d5, d6, pw1, pw2, wc1, wc2]
+        graph_nodes = [d1, d2, d3, d4, d5, d6, c1, c2, w1, w2]
 
         # Create various combinations of nodes that should be exported
         # and the final set of nodes that are exported in each case, following
         # predecessor(INPUT, CREATE)/successor(CALL, RETURN, CREATE) links.
         export_list = [
-            (wc1, [d1, d2, d3, d4, pw1, wc1, wc2]),
-            (wc2, [d1, d3, d4, pw1, wc2]),
-            (d3, [d1, d3, d4, pw1]),
-            (d4, [d1, d3, d4, pw1]),
-            (d5, [d1, d3, d4, d5, d6, pw1, pw2]),
-            (d6, [d1, d3, d4, d5, d6, pw1, pw2]),
-            (pw1, [d1, d3, d4, pw1]),
-            (pw2, [d1, d3, d4, d5, d6, pw1, pw2]),
+            (w1, [d1, d2, d3, d4, c1, w1, w2]),
+            (w2, [d1, d3, d4, c1, w2]),
+            (d3, [d1, d3, d4, c1]),
+            (d4, [d1, d3, d4, c1]),
+            (d5, [d1, d3, d4, d5, d6, c1, c2]),
+            (d6, [d1, d3, d4, d5, d6, c1, c2]),
+            (c1, [d1, d3, d4, c1]),
+            (c2, [d1, d3, d4, d5, d6, c1, c2]),
             (d1, [d1]),
             (d2, [d2])
         ]
@@ -2052,8 +2055,8 @@ class TestLinks(AiidaTestCase):
         tmp_folder = tempfile.mkdtemp()
 
         try:
-            wc2 = WorkflowNode().store()
-            wc1 = WorkflowNode().store()
+            w2 = WorkflowNode().store()
+            w1 = WorkflowNode().store()
             c1 = CalculationNode().store()
             ni1 = Int(1).store()
             ni2 = Int(2).store()
@@ -2061,23 +2064,23 @@ class TestLinks(AiidaTestCase):
             no2 = Int(2).store()
 
             # Create the connections between workcalculations and calculations
-            wc1.add_incoming(wc2, LinkType.CALL_WORK, 'call')
-            c1.add_incoming(wc1, LinkType.CALL_CALC, 'call')
+            w1.add_incoming(w2, LinkType.CALL_WORK, 'call')
+            c1.add_incoming(w1, LinkType.CALL_CALC, 'call')
 
-            # Connect the first data node to wc1 & c1
-            wc1.add_incoming(ni1, LinkType.INPUT_WORK, 'ni1-to-wc1')
+            # Connect the first data node to w1 & c1
+            w1.add_incoming(ni1, LinkType.INPUT_WORK, 'ni1-to-w1')
             c1.add_incoming(ni1, LinkType.INPUT_CALC, 'ni1-to-c1')
 
-            # Connect the second data node to wc1 & c1
-            wc1.add_incoming(ni2, LinkType.INPUT_WORK, 'ni2-to-wc1')
+            # Connect the second data node to w1 & c1
+            w1.add_incoming(ni2, LinkType.INPUT_WORK, 'ni2-to-w1')
             c1.add_incoming(ni2, LinkType.INPUT_CALC, 'ni2-to-c1')
 
-            # Connecting the first output node to wc1 & c1
-            no1.add_incoming(wc1, LinkType.RETURN, 'output1')
+            # Connecting the first output node to w1 & c1
+            no1.add_incoming(w1, LinkType.RETURN, 'output1')
             no1.add_incoming(c1, LinkType.CREATE, 'output1')
 
-            # Connecting the second output node to wc1 & c1
-            no2.add_incoming(wc1, LinkType.RETURN, 'output2')
+            # Connecting the second output node to w1 & c1
+            no2.add_incoming(w1, LinkType.RETURN, 'output2')
             no2.add_incoming(c1, LinkType.CREATE, 'output2')
 
             # Getting the input, create, return and call links
@@ -2094,7 +2097,7 @@ class TestLinks(AiidaTestCase):
             export_links = qb.all()
 
             export_file = os.path.join(tmp_folder, 'export.tar.gz')
-            export([wc2], outfile=export_file, silent=True)
+            export([w2], outfile=export_file, silent=True)
 
             self.reset_database()
 
