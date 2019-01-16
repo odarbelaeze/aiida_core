@@ -1815,7 +1815,7 @@ class TestLinks(AiidaTestCase):
             export_set = [tuple(_) for _ in export_links]
             import_set = [tuple(_) for _ in import_links]
 
-            self.assertEquals(set(export_set), set(import_set))
+            self.assertSetEqual(set(export_set), set(import_set))
         finally:
             shutil.rmtree(tmp_folder, ignore_errors=True)
 
@@ -1929,7 +1929,7 @@ class TestLinks(AiidaTestCase):
             calc.add_incoming(data_input, LinkType.INPUT_CALC, 'input')
             data_output.add_incoming(calc, LinkType.CREATE, 'create')
 
-            group = orm.Group(label='test_group').store()
+            group = Group(label='test_group').store()
             group.add_nodes(data_output)
 
             export_file = os.path.join(tmp_folder, 'export.tar.gz')
@@ -1992,7 +1992,7 @@ class TestLinks(AiidaTestCase):
             export_set = [tuple(_) for _ in export_links]
             import_set = [tuple(_) for _ in import_links]
 
-            self.assertEquals(set(export_set), set(import_set))
+            self.assertSetEqual(set(export_set), set(import_set))
         finally:
             shutil.rmtree(tmp_folder, ignore_errors=True)
 
@@ -2025,7 +2025,7 @@ class TestLinks(AiidaTestCase):
 
                 export_target_uuids = set(str(_.uuid) for _ in export_target)
 
-                self.assertEquals(
+                self.assertSetEqual(
                     export_target_uuids,
                     imported_node_uuids,
                     "Problem in comparison of export node: " +
@@ -2052,11 +2052,12 @@ class TestLinks(AiidaTestCase):
         from aiida.orm.node import CalculationNode, WorkflowNode
         from aiida.common.links import LinkType
         from aiida.orm.querybuilder import QueryBuilder
+
         tmp_folder = tempfile.mkdtemp()
 
         try:
-            w2 = WorkflowNode().store()
             w1 = WorkflowNode().store()
+            w2 = WorkflowNode().store()
             c1 = CalculationNode().store()
             ni1 = Int(1).store()
             ni2 = Int(2).store()
@@ -2107,7 +2108,7 @@ class TestLinks(AiidaTestCase):
             export_set = [tuple(_) for _ in export_links]
             import_set = [tuple(_) for _ in import_links]
 
-            self.assertEquals(set(export_set), set(import_set))
+            self.assertSetEqual(set(export_set), set(import_set))
         finally:
             shutil.rmtree(tmp_folder, ignore_errors=True)
 
@@ -2129,6 +2130,7 @@ class TestLinks(AiidaTestCase):
         from aiida.orm.node.process import CalculationNode, WorkflowNode
         from aiida.common.links import LinkType
         from aiida.orm.querybuilder import QueryBuilder
+
         tmp_folder = tempfile.mkdtemp()
 
         try:
@@ -2195,7 +2197,7 @@ class TestLinks(AiidaTestCase):
             export_set = [tuple(_) for _ in export_links]
             import_set = [tuple(_) for _ in import_links]
 
-            self.assertEquals(set(export_set), set(import_set))
+            self.assertSetEqual(set(export_set), set(import_set))
         finally:
             shutil.rmtree(tmp_folder, ignore_errors=True)
 
@@ -2208,8 +2210,8 @@ class TestLinks(AiidaTestCase):
            |    | INP |    | CALL |    |
            | i1 | --> | w1 | <--- | w2 |
            |____|     |____|      |____|
-                       | |
-                CREATE v v RETURN
+                        |
+                        v RETURN
                        ____
                       |    |
                       | o1 |
@@ -2218,10 +2220,13 @@ class TestLinks(AiidaTestCase):
         """
         import os, shutil, tempfile
 
+        from aiida.orm import Node, Data
         from aiida.orm.data.base import Int
         from aiida.orm.importexport import export
         from aiida.orm.node import WorkChainNode
         from aiida.common.links import LinkType
+        from aiida.orm.querybuilder import QueryBuilder
+
         tmp_folder = tempfile.mkdtemp()
 
         try:
@@ -2235,9 +2240,10 @@ class TestLinks(AiidaTestCase):
             o1.add_incoming(w1, LinkType.RETURN, 'return')
 
             links_wanted = [l for l in self.get_all_node_links() if l[3] in
-                            (LinkType.CREATE.value,
-                             LinkType.INPUT_WORK.value,
+                            # (LinkType.CREATE.value,  # Workflows do not CREATE, only RETURN
+                             (LinkType.INPUT_WORK.value,
                              LinkType.RETURN.value)]
+            export_set = [tuple(_) for _ in links_wanted]
 
             export_file_1 = os.path.join(tmp_folder, 'export-1.tar.gz')
             export_file_2 = os.path.join(tmp_folder, 'export-2.tar.gz')
@@ -2247,14 +2253,18 @@ class TestLinks(AiidaTestCase):
             self.reset_database()
 
             import_data(export_file_1, silent=True)
-            links_in_db = self.get_all_node_links()
+            import_links = self.get_all_node_links()
+            import_set = [tuple(_) for _ in import_links]
 
-            self.assertEquals(sorted(links_wanted), sorted(links_in_db))
+            # self.assertListEqual(sorted(links_wanted), sorted(links_in_db))
+            self.assertSetEqual(set(export_set), set(import_set))
             self.reset_database()
 
             import_data(export_file_2, silent=True)
-            links_in_db = self.get_all_node_links()
-            self.assertEquals(sorted(links_wanted), sorted(links_in_db))
+            import_links = self.get_all_node_links()
+            import_set = [tuple(_) for _ in import_links]
+            # self.assertListEqual(sorted(links_wanted), sorted(links_in_db))
+            self.assertSetEqual(set(export_set), set(import_set))
 
         finally:
             shutil.rmtree(tmp_folder, ignore_errors=True)
@@ -2268,7 +2278,7 @@ class TestLinks(AiidaTestCase):
 
         from aiida.orm.data.base import Int
         from aiida.orm.importexport import export
-        from aiida.orm.node import WorkChainNode
+        from aiida.orm.node.process import WorkflowNode
         from aiida.common.links import LinkType
         from aiida.orm.querybuilder import QueryBuilder
         from aiida.orm.node import Node
@@ -2276,34 +2286,37 @@ class TestLinks(AiidaTestCase):
         tmp_folder = tempfile.mkdtemp()
 
         try:
-            w1 = WorkChainNode().store()
-            w2 = WorkChainNode().store()
+            w1 = WorkflowNode().store()
+            w2 = WorkflowNode().store()
             i1 = Int(1).store()
             o1 = Int(2).store()
 
             w1.add_incoming(i1, LinkType.INPUT_WORK, 'input-i1')
             w1.add_incoming(w2, LinkType.CALL_WORK, 'call')
-            o1.add_incoming(w1, LinkType.RETURN, 'return')
-            o1.add_incoming(w2, LinkType.RETURN, 'return')
+            o1.add_incoming(w1, LinkType.RETURN, 'return1')
+            o1.add_incoming(w2, LinkType.RETURN, 'return2')
+            links_count = 4
 
             uuids_wanted = set(_.uuid for _ in (w1, o1, i1, w2))
-            links_wanted = [l for l in self.get_all_node_links() if l[3] in (
-                'create', 'input_calc', 'input_work', 'return', 'call_calc', 'call_work')]
+            links_wanted = self.get_all_node_links()
 
             export_file = os.path.join(tmp_folder, 'export.tar.gz')
-            export([o1, w1, w2, i1],
-                   outfile=export_file, silent=True)
+            export([o1, w1, w2, i1], outfile=export_file, silent=True)
 
             self.reset_database()
 
             import_data(export_file, silent=True)
 
-            uuids_in_db = [str(uuid) for [uuid] in
-                           QueryBuilder().append(Node, project='uuid').all()]
-            self.assertEquals(sorted(uuids_wanted), sorted(uuids_in_db))
+            uuids_in_db = [str(uuid) for [uuid] in 
+                QueryBuilder().append(Node, project='uuid').all()]
+            self.assertListEqual(sorted(uuids_wanted), sorted(uuids_in_db))
 
             links_in_db = self.get_all_node_links()
-            self.assertEquals(sorted(links_wanted), sorted(links_in_db))
+            self.assertListEqual(sorted(links_wanted), sorted(links_in_db))
+
+            # Assert number of links, checking both RETURN links are included
+            self.assertEqual(len(links_wanted), links_count)  # Before export
+            self.assertEqual(len(links_in_db), links_count)   # After import
 
         finally:
             shutil.rmtree(tmp_folder, ignore_errors=True)
@@ -2338,7 +2351,7 @@ class TestLinks(AiidaTestCase):
 
             import_data(export_file, silent=True)
 
-            self.assertEquals(load_node(code_uuid).label, code_label)
+            self.assertEqual(load_node(code_uuid).label, code_label)
         finally:
             shutil.rmtree(tmp_folder, ignore_errors=True)
 
@@ -2376,6 +2389,9 @@ class TestLinks(AiidaTestCase):
             jc.store()
 
             jc.add_incoming(code, LinkType.INPUT_CALC, 'code')
+            links_count = 1
+
+            export_links = self.get_all_node_links()
 
             export_file = os.path.join(tmp_folder, 'export.tar.gz')
             export([jc], outfile=export_file, silent=True)
@@ -2384,18 +2400,20 @@ class TestLinks(AiidaTestCase):
 
             import_data(export_file, silent=True)
 
-            # Check that the node is there
-            self.assertEquals(load_node(code_uuid).label, code_label)
+            # Check that the code node is there
+            self.assertEqual(load_node(code_uuid).label, code_label)
+
             # Check that the link is in place
-            qb = QueryBuilder()
-            qb.append(Code, project='uuid')
-            qb.append(CalcJobNode, project='uuid',
-                      edge_project=['label', 'type'],
-                      edge_filters={'type': {'==': LinkType.INPUT_CALC.value}})
-            self.assertEquals(qb.count(), 1,
-                              "Expected to find one and only one link from "
-                              "code to the calculation node. {} found."
-                              .format(qb.count()))
+            import_links = self.get_all_node_links()
+            self.assertListEqual(sorted(export_links), sorted(import_links))
+            self.assertEqual(len(export_links), links_count,
+                             "Expected to find only one link from code to "
+                             "the calculation node before export. {} found."
+                             .format(len(export_links)))
+            self.assertEqual(len(import_links), links_count,
+                             "Expected to find only one link from code to "
+                             "the calculation node after import. {} found."
+                             .format(len(import_links)))
         finally:
             shutil.rmtree(tmp_folder, ignore_errors=True)
 
