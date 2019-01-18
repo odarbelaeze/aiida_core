@@ -1830,7 +1830,6 @@ class TestLinks(AiidaTestCase):
         from aiida.orm.data.base import Int
         from aiida.orm.node.process import CalculationNode
         from aiida.orm.node.process import WorkflowNode
-        from aiida.common.datastructures import calc_states
         from aiida.common.links import LinkType
 
         if export_combination < 0 or export_combination > 9:
@@ -1867,7 +1866,6 @@ class TestLinks(AiidaTestCase):
 
         c1.add_incoming(d1, LinkType.INPUT_CALC, 'input')
         c1.add_incoming(w2, LinkType.CALL_CALC, 'call')
-        c1._set_process_state(calc_states.PARSING)
 
         d3.add_incoming(c1, LinkType.CREATE, 'create1')
         d3.add_incoming(w2, LinkType.RETURN, 'return1')
@@ -1876,12 +1874,8 @@ class TestLinks(AiidaTestCase):
         d4.add_incoming(w2, LinkType.RETURN, 'return2')
 
         c2.add_incoming(d4, LinkType.INPUT_CALC, 'input')
-        c2._set_process_state(calc_states.PARSING)
 
         d5.add_incoming(c2, LinkType.CREATE, 'create5')
-        d6.add_incoming(c2, LinkType.CREATE, 'create6')
-
-        # Return the generated nodes
         graph_nodes = [d1, d2, d3, d4, d5, d6, c1, c2, w1, w2]
 
         # Create various combinations of nodes that should be exported
