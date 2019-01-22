@@ -1422,7 +1422,6 @@ class DbComment(m.Model):
     user = m.ForeignKey(AUTH_USER_MODEL, on_delete=m.CASCADE)
     content = m.TextField(blank=True)
 
-    # NOTE: Should pk be updated to uuid for dbnode? Is there a way to only return first part of uuid?
     def __str__(self):
         return "DbComment for [{} {}] on {}".format(self.dbnode.get_simple_name(),
                                                     self.dbnode.pk, timezone.localtime(self.ctime).strftime("%Y-%m-%d"))
