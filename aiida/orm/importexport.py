@@ -228,7 +228,7 @@ def get_all_fields_info():
         },
         "label": {}
     }
-    all_fields_info[NODE_ENTITY_NAME] = { # NOTE: process_type needs to be added, or?
+    all_fields_info[NODE_ENTITY_NAME] = {
         "ctime": {
             "convert_type": "date"
         },
@@ -248,7 +248,8 @@ def get_all_fields_info():
             "requires": COMPUTER_ENTITY_NAME,
             "related_name": "dbnodes"
         },
-        "description": {}
+        "description": {},
+        "process_type": {}
     }
     all_fields_info[ATTRIBUTE_ENTITY_NAME] = {
         "dbnode": {

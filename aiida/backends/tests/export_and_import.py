@@ -327,65 +327,6 @@ class TestSimple(AiidaTestCase):
             shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
             shutil.rmtree(unpack_tmp_folder, ignore_errors=True)
 
-    def test_3(self):
-        """
-        Test importing of nodes, that have links to unknown nodes.
-        """
-        import tarfile
-        import os
-        import shutil
-        import tempfile
-
-        from aiida.orm.importexport import export
-        from aiida.common.folders import SandboxFolder
-        from aiida.orm.data.structure import StructureData
-        from aiida.orm import load_node
-        import aiida.common.json as json
-
-        # Creating a folder for the import/export files
-        temp_folder = tempfile.mkdtemp()
-        try:
-            node_label = "Test structure data"
-            sd = StructureData()
-            sd.label = str(node_label)
-            sd.store()
-
-            filename = os.path.join(temp_folder, "export.tar.gz")
-            export([sd], outfile=filename, silent=True)
-
-            unpack = SandboxFolder()
-            with tarfile.open(
-                    filename, "r:gz", format=tarfile.PAX_FORMAT) as tar:
-                tar.extractall(unpack.abspath)
-
-            with io.open(unpack.get_abs_path('data.json'), 'r', encoding='utf8') as fhandle:
-                metadata = json.load(fhandle)
-            metadata['links_uuid'].append({
-                'output': sd.uuid,
-                # note: this uuid is supposed to not be in the DB
-                'input': get_new_uuid(),
-                'label': 'parent'
-            })
-
-            with io.open(unpack.get_abs_path('data.json'), 'wb') as fhandle:
-                json.dump(metadata, fhandle)
-
-            with tarfile.open(
-                    filename, "w:gz", format=tarfile.PAX_FORMAT) as tar:
-                tar.add(unpack.abspath, arcname="")
-
-            self.clean_db()
-
-            with self.assertRaises(ValueError):
-                import_data(filename, silent=True)
-
-            import_data(filename, ignore_unknown_nodes=True, silent=True)
-            self.assertEquals(load_node(sd.uuid).label, node_label)
-
-        finally:
-            # Deleting the created temporary folder
-            shutil.rmtree(temp_folder, ignore_errors=True)
-
     def test_4(self):
         """
         Test control of licenses.
@@ -451,6 +392,14 @@ class TestSimple(AiidaTestCase):
         with self.assertRaises(LicensingException):
             export_tree([sd], folder=folder, silent=True,
                         forbidden_licenses=crashing_filter)
+
+class TestUsers(AiidaTestCase):
+
+    def setUp(self):
+        self.reset_database()
+
+    def tearDown(self):
+        pass
 
     def test_5(self):
         """
@@ -629,6 +578,15 @@ class TestSimple(AiidaTestCase):
             # Deleting the created temporary folder
             shutil.rmtree(temp_folder, ignore_errors=True)
 
+
+class TestGroups(AiidaTestCase):
+
+    def setUp(self):
+        self.reset_database()
+
+    def tearDown(self):
+        pass
+
     def test_7(self):
         """
         This test checks that nodes that belong to a specific group are
@@ -700,14 +658,11 @@ class TestSimple(AiidaTestCase):
         """
         Test that when exporting just a group, its nodes are also exported
         """
-        import os
-        import shutil
-        import tempfile
+        import os, shutil, tempfile
 
         from aiida.orm import load_node
-        from aiida.orm.data.structure import StructureData
+        from aiida.orm import StructureData, QueryBuilder
         from aiida.orm.importexport import export
-        from aiida.orm.querybuilder import QueryBuilder
 
         # Creating a folder for the import/export files
         temp_folder = tempfile.mkdtemp()
@@ -816,6 +771,15 @@ class TestSimple(AiidaTestCase):
             # Deleting the created temporary folder
             shutil.rmtree(temp_folder, ignore_errors=True)
 
+
+class TestCalculations(AiidaTestCase):
+
+    def setUp(self):
+        self.reset_database()
+
+    def tearDown(self):
+        pass
+
     def test_calcfunction_1(self):
         import shutil, os, tempfile
         from aiida.work import calcfunction
@@ -895,6 +859,171 @@ class TestSimple(AiidaTestCase):
 
             for uuid, value in uuids_values:
                 self.assertEquals(load_node(uuid).value, value)
+
+        finally:
+            # Deleting the created temporary folder
+            shutil.rmtree(temp_folder, ignore_errors=True)
+
+    def test_db_schema_changes_v04(self):
+        """
+        Check changes in database schema after upgrading to v0.4.
+        This includes all migrations from "base_data_plugin_type_string" (django: 0008)
+        until "dbgroup_type_string_change_content" (django: 0022), both included.
+        """
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm import load_node
+        from aiida.orm.importexport import export
+
+        from aiida.orm.data.str import Str
+        from aiida.orm.data.int import Int
+        from aiida.orm.data.float import Float
+        from aiida.orm.data.bool import Bool
+        from aiida.orm.data.list import List
+
+        # Test content
+        test_content = ("Hello", 6, -1.2399834e12, False)
+        test_types = ()
+        for node_type in ["str", "int", "float", "bool"]:
+            add_type = ('data.{}.{}.'.format(node_type, node_type.capitalize()),)
+            test_types = test_types.__add__(add_type)
+
+        # Create temporary folders for the import/export files
+        export_file_tmp_folder = tempfile.mkdtemp()
+
+        try:
+            # List of nodes to be exported
+            export_nodes = []
+
+            # Create list of base type nodes
+            nodes = [cls(val).store() for val, cls in zip(test_content, (Str, Int, Float, Bool))]
+            export_nodes.extend(nodes)
+            
+            # Collect uuids for created nodes
+            uuids = [n.uuid for n in nodes]
+            
+            # Create List() and insert already created nodes into it
+            list_node = List()
+            list_node.set_list(nodes)
+            list_node.store()
+            export_nodes.append(list_node)
+
+            # Export nodes
+            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
+            export(export_nodes, outfile=filename, silent=True)
+
+            # Clean the database
+            self.reset_database()
+
+            # Import nodes again
+            import_data(filename, silent=True)
+
+            # Check whether types are correctly imported
+            nlist = load_node(list_node.uuid)  # List
+            for uuid, list_value, refval, reftype in zip(uuids, nlist.get_list(), test_content, test_types):
+                # Str, Int, Float, Bool
+                n = load_node(uuid)
+                # Check value/content
+                self.assertEqual(n.value, refval)
+                # Check type
+                msg = "type of node ('{}') is not updated according to db schema v0.4".format(n.type)
+                self.assertEqual(n.type, reftype, msg=msg)
+
+                # List
+                # Check value
+                self.assertEqual(list_value, refval)
+            
+            # Check List type
+            msg = "type of node ('{}') is not updated according to db schema v0.4".format(nlist.type)
+            self.assertEqual(nlist.type, 'data.list.List.', msg=msg)
+            
+        finally:
+            # Deleting the created temporary folders
+            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
+
+
+class TestComplex(AiidaTestCase):
+
+    def setUp(self):
+        self.reset_database()
+
+    def tearDown(self):
+        pass
+
+    def test_complex_graph_import_export(self):
+        """
+        This test checks that a small and bit complex graph can be correctly
+        exported and imported.
+
+        It will create the graph, store it to the database, export it to a file
+        and import it. In the end it will check if the initial nodes are present
+        at the imported graph.
+        """
+        import tempfile, shutil, os
+
+        from aiida.orm import CalcJobNode
+        from aiida.orm import FolderData, ParameterData, RemoteData
+        from aiida.common.links import LinkType
+        from aiida.orm.importexport import export, import_data
+        from aiida.orm.utils import load_node
+        from aiida.common.exceptions import NotExistent
+
+        temp_folder = tempfile.mkdtemp()
+        try:
+            calc1 = CalcJobNode()
+            calc1.set_computer(self.computer)
+            calc1.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
+            calc1.label = "calc1"
+            calc1.store()
+
+            pd1 = ParameterData()
+            pd1.label = "pd1"
+            pd1.store()
+
+            pd2 = ParameterData()
+            pd2.label = "pd2"
+            pd2.store()
+
+            rd1 = RemoteData()
+            rd1.label = "rd1"
+            rd1.set_remote_path("/x/y.py")
+            rd1.set_computer(self.computer)
+            rd1.store()
+            rd1.add_incoming(calc1, link_type=LinkType.CREATE, link_label='link')
+
+            calc2 = CalcJobNode()
+            calc2.set_computer(self.computer)
+            calc2.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
+            calc2.label = "calc2"
+            calc2.store()
+            calc2.add_incoming(pd1, link_type=LinkType.INPUT_CALC, link_label='link1')
+            calc2.add_incoming(pd2, link_type=LinkType.INPUT_CALC, link_label='link2')
+            calc2.add_incoming(rd1, link_type=LinkType.INPUT_CALC, link_label='link3')
+
+            fd1 = FolderData()
+            fd1.label = "fd1"
+            fd1.store()
+            fd1.add_incoming(calc2, link_type=LinkType.CREATE, link_label='link')
+
+            node_uuids_labels = {calc1.uuid: calc1.label, pd1.uuid: pd1.label,
+                                 pd2.uuid: pd2.label, rd1.uuid: rd1.label,
+                                 calc2.uuid: calc2.label, fd1.uuid: fd1.label}
+
+            filename = os.path.join(temp_folder, "export.tar.gz")
+            export([fd1], outfile=filename, silent=True)
+
+            self.clean_db()
+
+            import_data(filename, silent=True, ignore_unknown_nodes=True)
+
+            for uuid, label in node_uuids_labels.items():
+                try:
+                    load_node(uuid)
+                except NotExistent:
+                    self.fail("Node with UUID {} and label {} was not "
+                              "found.".format(uuid, label))
 
         finally:
             # Deleting the created temporary folder
@@ -1020,287 +1149,6 @@ class TestSimple(AiidaTestCase):
             # Deleting the created temporary folder
             shutil.rmtree(temp_folder, ignore_errors=True)
 
-    def test_db_schema_changes_v04(self):
-        """
-        Check changes in database schema after upgrading to v0.4.
-        This includes all migrations from "base_data_plugin_type_string" (django: 0008)
-        until "dbgroup_type_string_change_content" (django: 0022), both included.
-
-        NB! This test ONLY includes tests for migrations (defined here from django number):
-            0009, 0010, 0016, 0017, 0018, 0019
-            provenance redesign changes are tested in test_db_schema_provenance_redesign.
-        
-        0009: Change type of base data types
-
-        NOT YET IMPLEMENTED IN TEST:
-        0010: Added process_type column to dbnode table
-        0016: Change type of Code class in db_dbnode table
-        0017: Drop table DbCalcState
-        0018: Uniqueness for uuid and email and native UUIDField in dbcomment, dbcomputer, dbgroup, dbworkflow
-        0019: Remove 'simpleplugins' in process_type and type columns of db_dbnode table
-        """
-        import os
-        import shutil
-        import tempfile
-
-        from aiida.orm import load_node
-        from aiida.orm.importexport import export
-
-        from aiida.orm.data.str import Str
-        from aiida.orm.data.int import Int
-        from aiida.orm.data.float import Float
-        from aiida.orm.data.bool import Bool
-        from aiida.orm.data.list import List
-
-        # Test content
-        test_content = ("Hello", 6, -1.2399834e12, False)
-        test_types = ()
-        for node_type in ["str", "int", "float", "bool"]:
-            add_type = ('data.{}.{}.'.format(node_type, node_type.capitalize()),)
-            test_types = test_types.__add__(add_type)
-
-        # Create temporary folders for the import/export files
-        export_file_tmp_folder = tempfile.mkdtemp()
-
-        try:
-            # List of nodes to be exported
-            export_nodes = []
-
-            # Create list of base type nodes
-            nodes = [cls(val).store() for val, cls in zip(test_content, (Str, Int, Float, Bool))]
-            export_nodes.extend(nodes)
-            
-            # Collect uuids for created nodes
-            uuids = [n.uuid for n in nodes]
-            
-            # Create List() and insert already created nodes into it
-            list_node = List()
-            list_node.set_list(nodes)
-            list_node.store()
-            export_nodes.append(list_node)
-
-            # Export nodes
-            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
-            export(export_nodes, outfile=filename, silent=True)
-
-            # Clean the database
-            self.clean_db()
-
-            # Import nodes again
-            import_data(filename, silent=True)
-
-            # Check whether types are correctly imported
-            nlist = load_node(list_node.uuid)  # List
-            for uuid, list_value, refval, reftype in zip(uuids, nlist.get_list(), test_content, test_types):
-                # Str, Int, Float, Bool
-                n = load_node(uuid)
-                # Check value/content
-                self.assertEqual(n.value, refval)
-                # Check type
-                msg = "type of node ('{}') is not updated according to db schema v0.4".format(n.type)
-                self.assertEqual(n.type, reftype, msg=msg)
-
-                # List
-                # Check value
-                self.assertEqual(list_value, refval)
-            
-            # Check List type
-            msg = "type of node ('{}') is not updated according to db schema v0.4".format(nlist.type)
-            self.assertEqual(nlist.type, 'data.list.List.', msg=msg)
-            
-        finally:
-            # Deleting the created temporary folders
-            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
-
-    def test_node_comments(self):
-        """
-        This test checks that node comments are exported and imported correctly.
-        """
-        import os
-        import shutil
-        import tempfile
-
-        from aiida.orm import load_node
-        from aiida.orm.importexport import export
-        from aiida.orm.node.process import CalculationNode
-
-        # Test content
-        test_comments = [
-            ["This is a test of a comment"],
-            ["Another test comment"],
-            ["Yet another test comment"],
-            ["This is the first in a list of comments",
-            "This is the second in the list of comments"]
-        ]
-
-        # Create temporary folders for the import/export files
-        export_file_tmp_folder = tempfile.mkdtemp()
-
-        try:
-            # Create comment calc nodes
-            nodes = []
-            for comment_lists in test_comments:
-                node = CalculationNode().store()
-                for comment in comment_lists:
-                    node.add_comment(comment)
-                nodes.append(node)
-            
-            # Collect uuids for created nodes
-            uuids = [n.uuid for n in nodes]
-            
-            # Export nodes
-            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
-            export(nodes, outfile=filename, silent=True)
-
-            # Clean the database
-            self.clean_db()
-
-            # Import nodes again
-            import_data(filename, silent=True)
-
-            # Check whether comments are preserved
-            for uuid, refval in zip(uuids, test_comments):
-                comments = [n.content for n in load_node(uuid).get_comments()]
-                self.assertListEqual(comments, refval)
-        finally:
-            # Deleting the created temporary folders
-            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
-
-    def test_node_extras(self):
-        """
-        This test checks that node extras are exported and imported correctly.
-        """
-        import os
-        import shutil
-        import tempfile
-
-        from aiida.orm import load_node
-        from aiida.orm.importexport import export
-        from aiida.orm.node.process import CalculationNode
-
-        # Test content
-        test_extra = [
-            {"test_key": "test_value"},
-            {"test_key2": 2},
-            {"test_key3": False},
-            {"test_key4": 2.8947833e12}
-        ]
-
-        # Create temporary folders for the import/export files
-        export_file_tmp_folder = tempfile.mkdtemp()
-
-        try:
-            # Create extra nodes
-            nodes = []
-            for extra in test_extra:
-                node = CalculationNode().store()
-                for k, v in extra.items():
-                    node.set_extra(k, v)
-                nodes.append(node)
-            
-            # Collect uuids for created nodes
-            uuids = [n.uuid for n in nodes]
-            
-            # Export nodes
-            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
-            export(nodes, outfile=filename, silent=True)
-
-            # Clean the database
-            self.clean_db()
-
-            # Import nodes again
-            import_data(filename, silent=True)
-
-            # Check whether extra values are preserved
-            for uuid, refval in zip(uuids, test_extra):
-                self.assertDictContainsSubset(refval, load_node(uuid).get_extras())
-        finally:
-            # Deleting the created temporary folders
-            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
-
-
-class TestComplex(AiidaTestCase):
-    def test_complex_graph_import_export(self):
-        """
-        This test checks that a small and bit complex graph can be correctly
-        exported and imported.
-
-        It will create the graph, store it to the database, export it to a file
-        and import it. In the end it will check if the initial nodes are present
-        at the imported graph.
-        """
-        import tempfile
-        import shutil
-        import os
-
-        from aiida.orm.node import CalcJobNode
-        from aiida.orm.data.folder import FolderData
-        from aiida.orm.data.parameter import ParameterData
-        from aiida.orm.data.remote import RemoteData
-        from aiida.common.links import LinkType
-        from aiida.orm.importexport import export, import_data
-        from aiida.orm.utils import load_node
-        from aiida.common.exceptions import NotExistent
-
-        temp_folder = tempfile.mkdtemp()
-        try:
-            calc1 = CalcJobNode()
-            calc1.set_computer(self.computer)
-            calc1.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
-            calc1.label = "calc1"
-            calc1.store()
-
-            pd1 = ParameterData()
-            pd1.label = "pd1"
-            pd1.store()
-
-            pd2 = ParameterData()
-            pd2.label = "pd2"
-            pd2.store()
-
-            rd1 = RemoteData()
-            rd1.label = "rd1"
-            rd1.set_remote_path("/x/y.py")
-            rd1.set_computer(self.computer)
-            rd1.store()
-            rd1.add_incoming(calc1, link_type=LinkType.CREATE, link_label='link')
-
-            calc2 = CalcJobNode()
-            calc2.set_computer(self.computer)
-            calc2.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
-            calc2.label = "calc2"
-            calc2.store()
-            calc2.add_incoming(pd1, link_type=LinkType.INPUT_CALC, link_label='link1')
-            calc2.add_incoming(pd2, link_type=LinkType.INPUT_CALC, link_label='link2')
-            calc2.add_incoming(rd1, link_type=LinkType.INPUT_CALC, link_label='link3')
-
-            fd1 = FolderData()
-            fd1.label = "fd1"
-            fd1.store()
-            fd1.add_incoming(calc2, link_type=LinkType.CREATE, link_label='link')
-
-            node_uuids_labels = {calc1.uuid: calc1.label, pd1.uuid: pd1.label,
-                                 pd2.uuid: pd2.label, rd1.uuid: rd1.label,
-                                 calc2.uuid: calc2.label, fd1.uuid: fd1.label}
-
-            filename = os.path.join(temp_folder, "export.tar.gz")
-            export([fd1], outfile=filename, silent=True)
-
-            self.clean_db()
-
-            import_data(filename, silent=True, ignore_unknown_nodes=True)
-
-            for uuid, label in node_uuids_labels.items():
-                try:
-                    load_node(uuid)
-                except NotExistent:
-                    self.fail("Node with UUID {} and label {} was not "
-                              "found.".format(uuid, label))
-
-        finally:
-            # Deleting the created temporary folder
-            shutil.rmtree(temp_folder, ignore_errors=True)
-
 
 class TestComputer(AiidaTestCase):
 
@@ -1321,14 +1169,10 @@ class TestComputer(AiidaTestCase):
         Each calculation is related to the same computer. In the end we should
         have only one computer
         """
-        import os
-        import shutil
-        import tempfile
+        import os, shutil, tempfile
 
         from aiida.orm.importexport import export
-        from aiida.orm.querybuilder import QueryBuilder
-        from aiida.orm.computers import Computer
-        from aiida.orm.node import CalcJobNode
+        from aiida.orm import CalcJobNode, Computer, QueryBuilder
 
         # Creating a folder for the import/export files
         export_file_tmp_folder = tempfile.mkdtemp()
@@ -1443,14 +1287,10 @@ class TestComputer(AiidaTestCase):
         renamed. It also checks that the names were correctly imported (without
         any change since there is no computer name collision)
         """
-        import os
-        import shutil
-        import tempfile
+        import os, shutil, tempfile
 
         from aiida.orm.importexport import export
-        from aiida.orm.querybuilder import QueryBuilder
-        from aiida.orm.computers import Computer
-        from aiida.orm.node import CalcJobNode
+        from aiida.orm import CalcJobNode, Computer, QueryBuilder
 
         # Creating a folder for the import/export files
         export_file_tmp_folder = tempfile.mkdtemp()
@@ -1546,15 +1386,11 @@ class TestComputer(AiidaTestCase):
         This test checks that if there is a name collision, the imported
         computers are renamed accordingly.
         """
-        import os
-        import shutil
-        import tempfile
+        import os, shutil, tempfile
 
         from aiida.orm.importexport import export
-        from aiida.orm.querybuilder import QueryBuilder
-        from aiida.orm.computers import Computer
-        from aiida.orm.node import CalcJobNode
         from aiida.orm.importexport import DUPL_SUFFIX
+        from aiida.orm import CalcJobNode, Computer, QueryBuilder
 
         # Creating a folder for the import/export files
         export_file_tmp_folder = tempfile.mkdtemp()
@@ -1664,14 +1500,10 @@ class TestComputer(AiidaTestCase):
         This test checks that the metadata and transport params are
         exported and imported correctly in both backends.
         """
-        import os
-        import shutil
-        import tempfile
+        import os, shutil, tempfile
 
         from aiida.orm.importexport import export
-        from aiida.orm.querybuilder import QueryBuilder
-        from aiida.orm.computers import Computer
-        from aiida.orm.node import CalcJobNode
+        from aiida.orm import CalcJobNode, Computer, QueryBuilder
 
         # Creating a folder for the import/export files
         export_file_tmp_folder = tempfile.mkdtemp()
@@ -1773,13 +1605,71 @@ class TestLinks(AiidaTestCase):
     def get_all_node_links(self):
         """
         """
-        from aiida.orm import load_node, Node
-        from aiida.orm.querybuilder import QueryBuilder
+        from aiida.orm import load_node, Node, QueryBuilder
         qb = QueryBuilder()
         qb.append(Node, project='uuid', tag='input')
         qb.append(Node, project='uuid', tag='output',
                   edge_project=['label', 'type'], with_incoming='input')
         return qb.all()
+
+    def test_3(self):
+        """
+        Test importing of nodes, that have links to unknown nodes.
+        """
+        import tarfile
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm.importexport import export
+        from aiida.common.folders import SandboxFolder
+        from aiida.orm.data.structure import StructureData
+        from aiida.orm import load_node
+        import aiida.common.json as json
+
+        # Creating a folder for the import/export files
+        temp_folder = tempfile.mkdtemp()
+        try:
+            node_label = "Test structure data"
+            sd = StructureData()
+            sd.label = str(node_label)
+            sd.store()
+
+            filename = os.path.join(temp_folder, "export.tar.gz")
+            export([sd], outfile=filename, silent=True)
+
+            unpack = SandboxFolder()
+            with tarfile.open(
+                    filename, "r:gz", format=tarfile.PAX_FORMAT) as tar:
+                tar.extractall(unpack.abspath)
+
+            with io.open(unpack.get_abs_path('data.json'), 'r', encoding='utf8') as fhandle:
+                metadata = json.load(fhandle)
+            metadata['links_uuid'].append({
+                'output': sd.uuid,
+                # note: this uuid is supposed to not be in the DB
+                'input': get_new_uuid(),
+                'label': 'parent'
+            })
+
+            with io.open(unpack.get_abs_path('data.json'), 'wb') as fhandle:
+                json.dump(metadata, fhandle)
+
+            with tarfile.open(
+                    filename, "w:gz", format=tarfile.PAX_FORMAT) as tar:
+                tar.add(unpack.abspath, arcname="")
+
+            self.clean_db()
+
+            with self.assertRaises(ValueError):
+                import_data(filename, silent=True)
+
+            import_data(filename, ignore_unknown_nodes=True, silent=True)
+            self.assertEquals(load_node(sd.uuid).label, node_label)
+
+        finally:
+            # Deleting the created temporary folder
+            shutil.rmtree(temp_folder, ignore_errors=True)
 
     def test_input_and_create_links(self):
         """
@@ -1788,9 +1678,8 @@ class TestLinks(AiidaTestCase):
         """
         import os, shutil, tempfile
 
-        from aiida.orm.data.int import Int
+        from aiida.orm import Int, CalculationNode
         from aiida.orm.importexport import export
-        from aiida.orm.node import CalculationNode
         from aiida.common.links import LinkType
 
         tmp_folder = tempfile.mkdtemp()
@@ -1827,9 +1716,7 @@ class TestLinks(AiidaTestCase):
         but also the final expected set of nodes (after adding the expected
         predecessors, desuccessors).
         """
-        from aiida.orm.data.base import Int
-        from aiida.orm.node.process import CalculationNode
-        from aiida.orm.node.process import WorkflowNode
+        from aiida.orm import Int, CalculationNode, WorkflowNode
         from aiida.common.links import LinkType
 
         if export_combination < 0 or export_combination > 9:
@@ -1898,16 +1785,11 @@ class TestLinks(AiidaTestCase):
 
     def test_data_create_reversed_false(self):
         """Verify that create_reversed = False is respected when only exporting Data nodes."""
-        import os
-        import shutil
-        import tempfile
+        import os, shutil, tempfile
 
-        from aiida.orm import Data, Group
-        from aiida.orm.data.base import Int
-        from aiida.orm.node import CalcJobNode
+        from aiida.orm import Data, Group, Int, CalcJobNode, QueryBuilder
         from aiida.orm.importexport import export
         from aiida.common.links import LinkType
-        from aiida.orm.querybuilder import QueryBuilder
 
         tmp_folder = tempfile.mkdtemp()
 
@@ -1953,10 +1835,9 @@ class TestLinks(AiidaTestCase):
         """
         import os, shutil, tempfile
 
-        from aiida.orm import Node
+        from aiida.orm import Node, QueryBuilder
         from aiida.orm.importexport import export
         from aiida.common.links import LinkType
-        from aiida.orm.querybuilder import QueryBuilder
         tmp_folder = tempfile.mkdtemp()
 
         try:
@@ -1993,8 +1874,7 @@ class TestLinks(AiidaTestCase):
     def test_complex_workflow_graph_export_set_expansion(self):
         import os, shutil, tempfile
         from aiida.orm.importexport import export
-        from aiida.orm.querybuilder import QueryBuilder
-        from aiida.orm import Node
+        from aiida.orm import Node, QueryBuilder
         from aiida.orm.utils import load_node
 
         for export_conf in range(0, 9):
@@ -2053,12 +1933,9 @@ class TestLinks(AiidaTestCase):
         """
         import os, shutil, tempfile
 
-        from aiida.orm import Node, Data
-        from aiida.orm.data.base import Int
+        from aiida.orm import Node, Data, Int, WorkflowNode, QueryBuilder
         from aiida.orm.importexport import export
-        from aiida.orm.node.process import WorkflowNode
         from aiida.common.links import LinkType
-        from aiida.orm.querybuilder import QueryBuilder
 
         tmp_folder = tempfile.mkdtemp()
 
@@ -2108,12 +1985,9 @@ class TestLinks(AiidaTestCase):
         """
         import os, shutil, tempfile
 
-        from aiida.orm.data.base import Int
         from aiida.orm.importexport import export
-        from aiida.orm.node.process import WorkflowNode
+        from aiida.orm import Int, WorkflowNode, Node, QueryBuilder
         from aiida.common.links import LinkType
-        from aiida.orm.querybuilder import QueryBuilder
-        from aiida.orm.node import Node
 
         tmp_folder = tempfile.mkdtemp()
 
@@ -2198,9 +2072,7 @@ class TestLinks(AiidaTestCase):
         from aiida.orm.utils import load_node
         from aiida.orm.importexport import export
         from aiida.common.links import LinkType
-        from aiida.orm.node import CalcJobNode
-        from aiida.orm.code import Code
-        from aiida.orm.querybuilder import QueryBuilder
+        from aiida.orm import CalcJobNode, Code, QueryBuilder
 
         tmp_folder = tempfile.mkdtemp()
 
@@ -2287,17 +2159,20 @@ class TestLinks(AiidaTestCase):
 
 class TestLogs(AiidaTestCase):
 
+    def setUp(self):
+        self.reset_database()
+
     def tearDown(self):
         """
         Delete all the created log entries
         """
-        from aiida import orm
+        from aiida.orm import Log
         super(TestLogs, self).tearDown()
-        orm.Log.objects.delete_many({})
+        Log.objects.delete_many({})
 
     def test_export_import_of_log_entries(self):
         import os, shutil, tempfile
-        from aiida.orm.node import CalculationNode
+        from aiida.orm import CalculationNode, Log
         from aiida.orm.importexport import export
 
         tmp_folder = tempfile.mkdtemp()
@@ -2309,7 +2184,7 @@ class TestLogs(AiidaTestCase):
             # Firing a log for an unstored node should not end up in the database
             calc.logger.critical(message)
             # There should be no log messages for the unstored object
-            self.assertEquals(len(orm.Log.objects.all()), 0)
+            self.assertEquals(len(Log.objects.all()), 0)
 
             # After storing the node, logs above log level should be stored
             calc.store()
@@ -2324,7 +2199,7 @@ class TestLogs(AiidaTestCase):
             import_data(export_file, silent=True)
 
             # Finding all the log messages
-            logs = orm.Log.objects.all()
+            logs = Log.objects.all()
 
             self.assertEquals(len(logs), 1)
             self.assertEquals(logs[0].message, message)
