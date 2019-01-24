@@ -851,133 +851,6 @@ class TestCalculations(AiidaTestCase):
             shutil.rmtree(temp_folder, ignore_errors=True)
 
 
-class TestProvenanceRedesign(AiidaTestCase):
-    """ Check changes in database schema after upgrading to v0.4 (Provenance Redesign)
-    This includes all migrations from "base_data_plugin_type_string" (django: 0008)
-    until "dbgroup_type_string_change_content" (django: 0022), both included.
-    """
-
-    def setUp(self):
-        self.reset_database()
-
-    def tearDown(self):
-        self.reset_database()
-
-    def test_base_data_type_change(self):
-        """ Base Data types type string changed
-        Example: Bool: “data.base.Bool.” → “data.bool.Bool.”
-        """
-        import os
-        import shutil
-        import tempfile
-
-        from aiida.orm.data.base import Str, Int, Float, Bool, List
-
-        # Test content
-        test_content = ("Hello", 6, -1.2399834e12, False)
-        test_types = ()
-        for node_type in ["str", "int", "float", "bool"]:
-            add_type = ('data.{}.{}.'.format(node_type, node_type.capitalize()),)
-            test_types = test_types.__add__(add_type)
-
-        # Create temporary folders for the import/export files
-        export_file_tmp_folder = tempfile.mkdtemp()
-
-        try:
-            # List of nodes to be exported
-            export_nodes = []
-
-            # Create list of base type nodes
-            nodes = [cls(val).store() for val, cls in zip(test_content, (Str, Int, Float, Bool))]
-            export_nodes.extend(nodes)
-            
-            # Collect uuids for created nodes
-            uuids = [n.uuid for n in nodes]
-            
-            # Create List() and insert already created nodes into it
-            list_node = List()
-            list_node.set_list(nodes)
-            list_node.store()
-            export_nodes.append(list_node)
-
-            # Export nodes
-            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
-            export(export_nodes, outfile=filename, silent=True)
-
-            # Clean the database
-            self.reset_database()
-
-            # Import nodes again
-            import_data(filename, silent=True)
-
-            # Check whether types are correctly imported
-            nlist = load_node(list_node.uuid)  # List
-            for uuid, list_value, refval, reftype in zip(uuids, nlist.get_list(), test_content, test_types):
-                # Str, Int, Float, Bool
-                n = load_node(uuid)
-                # Check value/content
-                self.assertEqual(n.value, refval)
-                # Check type
-                msg = "type of node ('{}') is not updated according to db schema v0.4".format(n.type)
-                self.assertEqual(n.type, reftype, msg=msg)
-
-                # List
-                # Check value
-                self.assertEqual(list_value, refval)
-            
-            # Check List type
-            msg = "type of node ('{}') is not updated according to db schema v0.4".format(nlist.type)
-            self.assertEqual(nlist.type, 'data.list.List.', msg=msg)
-            
-        finally:
-            # Deleting the created temporary folders
-            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
-
-    def test_node_process_type(self):
-        """ Column "process_type" added to Node entity """
-        
-        import os
-        import shutil
-        import tempfile
-
-        from aiida.orm import CalcJobNode
-
-        # Create temporary folder for the import/export files
-        tmp_folder = tempfile.mkdtemp()
-
-        # Process type
-
-        try:
-            # Create node
-            node = CalcJobNode()
-            node.set_computer(self.computer)
-            node.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
-            node.store()
-
-            # Assert correct type string
-            self.assertEqual(node.type, "node.process.calculation.calcjob.CalcJobNode.")
-
-            print(node.type, node.process_type)
-            # Set process_type
-            if node.process_type == "":
-                node.process_type = "aiida.calculations:quantumespresso.pw"
-            print(node.type, node.process_type)
-
-            # Export nodes
-            filename = os.path.join(tmp_folder, "export.tar.gz")
-            export([node], outfile=filename, silent=True)
-
-            # Clean the database and reimport data
-            self.reset_database()
-            import_data(filename, silent=True)
-
-            # Check whether types are correctly imported
-            
-        finally:
-            # Deleting the created temporary folders
-            shutil.rmtree(tmp_folder, ignore_errors=True)
-
-
 class TestComplex(AiidaTestCase):
 
     def setUp(self):
@@ -1762,7 +1635,6 @@ class TestLinks(AiidaTestCase):
 
         c1 = CalculationNode()
         c1.set_computer(self.computer)
-        # c1.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
         c1.store()
 
         d3 = Int(1).store()
@@ -1770,7 +1642,6 @@ class TestLinks(AiidaTestCase):
 
         c2 = CalculationNode()
         c2.set_computer(self.computer)
-        # c2.set_option('resources', {"num_machines": 1, "num_mpiprocs_per_machine": 1})
         c2.store()
 
         d5 = Int(1).store()
@@ -2232,4 +2103,148 @@ class TestLogs(AiidaTestCase):
             self.assertEqual(logs[0].message, message)
 
         finally:
+            shutil.rmtree(tmp_folder, ignore_errors=True)
+
+
+class TestProvenanceRedesign(AiidaTestCase):
+    """ Check changes in database schema after upgrading to v0.4 (Provenance Redesign)
+    This includes all migrations from "base_data_plugin_type_string" (django: 0008)
+    until "dbgroup_type_string_change_content" (django: 0022), both included.
+    """
+
+    def setUp(self):
+        super(TestProvenanceRedesign, self).setUp()
+
+    def tearDown(self):
+        super(TestProvenanceRedesign, self).tearDown()
+
+    def test_base_data_type_change(self):
+        """ Base Data types type string changed
+        Example: Bool: “data.base.Bool.” → “data.bool.Bool.”
+        """
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm.data.base import Str, Int, Float, Bool, List
+
+        # Test content
+        test_content = ("Hello", 6, -1.2399834e12, False)
+        test_types = ()
+        for node_type in ["str", "int", "float", "bool"]:
+            add_type = ('data.{}.{}.'.format(node_type, node_type.capitalize()),)
+            test_types = test_types.__add__(add_type)
+
+        # Create temporary folders for the import/export files
+        export_file_tmp_folder = tempfile.mkdtemp()
+
+        try:
+            # List of nodes to be exported
+            export_nodes = []
+
+            # Create list of base type nodes
+            nodes = [cls(val).store() for val, cls in zip(test_content, (Str, Int, Float, Bool))]
+            export_nodes.extend(nodes)
+            
+            # Collect uuids for created nodes
+            uuids = [n.uuid for n in nodes]
+            
+            # Create List() and insert already created nodes into it
+            list_node = List()
+            list_node.set_list(nodes)
+            list_node.store()
+            export_nodes.append(list_node)
+
+            # Export nodes
+            filename = os.path.join(export_file_tmp_folder, "export.tar.gz")
+            export(export_nodes, outfile=filename, silent=True)
+
+            # Clean the database
+            self.reset_database()
+
+            # Import nodes again
+            import_data(filename, silent=True)
+
+            # Check whether types are correctly imported
+            nlist = load_node(list_node.uuid)  # List
+            for uuid, list_value, refval, reftype in zip(uuids, nlist.get_list(), test_content, test_types):
+                # Str, Int, Float, Bool
+                n = load_node(uuid)
+                # Check value/content
+                self.assertEqual(n.value, refval)
+                # Check type
+                msg = "type of node ('{}') is not updated according to db schema v0.4".format(n.type)
+                self.assertEqual(n.type, reftype, msg=msg)
+
+                # List
+                # Check value
+                self.assertEqual(list_value, refval)
+            
+            # Check List type
+            msg = "type of node ('{}') is not updated according to db schema v0.4".format(nlist.type)
+            self.assertEqual(nlist.type, 'data.list.List.', msg=msg)
+            
+        finally:
+            # Deleting the created temporary folders
+            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
+
+    def test_node_process_type(self):
+        """ Column `process_type` added to `Node` entity DB table """
+        
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm import ProcessNode, QueryBuilder
+        from aiida.orm.data.int import Int
+        from aiida.work.launch import run_get_node
+        from aiida.work.test_utils import AddProcess
+
+        # Create temporary folder for the import/export files
+        tmp_folder = tempfile.mkdtemp()
+
+        # Node types
+        node_type = "node.process.workflow.WorkflowNode."
+        node_process_type = "aiida.work.test_utils.AddProcess"
+
+        try:
+            # Run workflow
+            inputs = {'a': Int(2), 'b': Int(3)}
+            result, node = run_get_node(AddProcess, **inputs)
+
+            # Save node uuid
+            node_uuid = str(node.uuid)
+
+            # Assert correct type and process_type strings
+            self.assertEqual(node.type, node_type)
+            self.assertEqual(node.process_type, node_process_type)
+
+            # Export nodes
+            filename = os.path.join(tmp_folder, "export.tar.gz")
+            export([node], outfile=filename, silent=True)
+
+            # Clean the database and reimport data
+            self.reset_database()
+            import_data(filename, silent=True)
+
+            # Retrieve node and check exactly one node is imported
+            qb = QueryBuilder()
+            qb.append(ProcessNode, project=['uuid'])
+            
+            self.assertEqual(qb.count(), 1)
+            
+            # Get node uuid and check it is the same as the one exported
+            nodes = qb.all()
+            imported_node_uuid = str(nodes[0][0])
+
+            self.assertEqual(imported_node_uuid, node_uuid)
+
+            # Check imported node type and process type
+            node = load_node(imported_node_uuid)
+            
+            self.assertEqual(node.type, node_type)
+            self.assertEqual(node.process_type, node_process_type)
+            
+        finally:
+            # Deleting the created temporary folders
             shutil.rmtree(tmp_folder, ignore_errors=True)
