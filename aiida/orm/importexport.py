@@ -24,7 +24,6 @@ from aiida.orm.node import Node
 from aiida.orm.querybuilder import QueryBuilder
 from aiida.orm.users import User
 from aiida.orm.logs import Log
-from aiida.orm.comments import Comment
 
 IMPORTGROUP_TYPE = GroupTypeString.IMPORTGROUP_TYPE
 DUPL_SUFFIX = ' (Imported #{})'
@@ -39,7 +38,6 @@ ATTRIBUTE_ENTITY_NAME = "Attribute"
 COMPUTER_ENTITY_NAME = "Computer"
 USER_ENTITY_NAME = "User"
 LOG_ENTITY_NAME = "Log"
-COMMENT_ENTITY_NAME = "Comment"
 
 # The signatures used to reference the entities in the import/export file
 NODE_SIGNATURE = "aiida.backends.djsite.db.models.DbNode"
@@ -49,7 +47,6 @@ COMPUTER_SIGNATURE = "aiida.backends.djsite.db.models.DbComputer"
 USER_SIGNATURE = "aiida.backends.djsite.db.models.DbUser"
 ATTRIBUTE_SIGNATURE = "aiida.backends.djsite.db.models.DbAttribute"
 LOG_SIGNATURE = "aiida.backends.djsite.db.models.DbLog"
-COMMENT_SIGNATURE = "aiida.backends.djsite.db.models.DbComment"
 
 # Mapping from entity names to signatures (used by the SQLA import/export)
 entity_names_to_signatures = {
@@ -59,8 +56,7 @@ entity_names_to_signatures = {
     COMPUTER_ENTITY_NAME: COMPUTER_SIGNATURE,
     USER_ENTITY_NAME: USER_SIGNATURE,
     ATTRIBUTE_ENTITY_NAME: ATTRIBUTE_SIGNATURE,
-    LOG_ENTITY_NAME: LOG_SIGNATURE,
-    COMMENT_ENTITY_NAME: COMMENT_SIGNATURE,
+    LOG_ENTITY_NAME: LOG_SIGNATURE
 }
 
 # Mapping from signatures to entity names (used by the SQLA import/export)
@@ -71,8 +67,7 @@ signatures_to_entity_names = {
     COMPUTER_SIGNATURE: COMPUTER_ENTITY_NAME,
     USER_SIGNATURE: USER_ENTITY_NAME,
     ATTRIBUTE_SIGNATURE: ATTRIBUTE_ENTITY_NAME,
-    LOG_SIGNATURE: LOG_ENTITY_NAME,
-    COMMENT_SIGNATURE: COMMENT_ENTITY_NAME,
+    LOG_SIGNATURE: LOG_ENTITY_NAME
 }
 
 # Mapping from entity names to AiiDA classes (used by the SQLA import/export)
@@ -81,8 +76,7 @@ entity_names_to_entities = {
     GROUP_ENTITY_NAME: Group,
     COMPUTER_ENTITY_NAME: Computer,
     USER_ENTITY_NAME: User,
-    LOG_ENTITY_NAME: Log,
-    COMMENT_ENTITY_NAME: Comment,
+    LOG_ENTITY_NAME: Log
 }
 
 
@@ -122,10 +116,6 @@ def schema_to_entity_names(class_string):
             class_string == "aiida.backends.sqlalchemy.models.log.DbLog"):
         return LOG_ENTITY_NAME
 
-    if (class_string == "aiida.backends.djsite.db.models.DbComment" or
-            class_string == "aiida.backends.sqlalchemy.models.comment.DbComment"):
-        return COMMENT_ENTITY_NAME
-
 
 # Mapping of entity names to SQLA class paths
 entity_names_to_sqla_schema = {
@@ -134,8 +124,7 @@ entity_names_to_sqla_schema = {
     GROUP_ENTITY_NAME: "aiida.backends.sqlalchemy.models.group.DbGroup",
     COMPUTER_ENTITY_NAME: "aiida.backends.sqlalchemy.models.computer.DbComputer",
     USER_ENTITY_NAME: "aiida.backends.sqlalchemy.models.user.DbUser",
-    LOG_ENTITY_NAME: "aiida.backends.sqlalchemy.models.log.DbLog",
-    COMMENT_ENTITY_NAME: "aiida.backends.sqlalchemy.models.comment.DbComment",
+    LOG_ENTITY_NAME: "aiida.backends.sqlalchemy.models.log.DbLog"
 }
 
 # Mapping of the export file fields (that coincide with the Django fields) to
@@ -151,10 +140,6 @@ file_fields_to_model_fields = {
     },
     COMPUTER_ENTITY_NAME: {
         "metadata": "_metadata"
-    },
-    COMMENT_ENTITY_NAME: {
-        "dbnode": "dbnode_id",
-        "user": "user_id"
     }
 }
 
@@ -170,11 +155,7 @@ model_fields_to_file_fields = {
     },
     COMPUTER_ENTITY_NAME: {
         "_metadata": "metadata"},
-    USER_ENTITY_NAME: {},
-    COMMENT_ENTITY_NAME: {
-        "dbnode_id": "dbnode",
-        "user_id": "user"
-    }
+    USER_ENTITY_NAME: {}
 }
 
 
@@ -194,8 +175,7 @@ def get_all_fields_info():
         NODE_ENTITY_NAME: "uuid",
         ATTRIBUTE_ENTITY_NAME: None,
         GROUP_ENTITY_NAME: "uuid",
-        LOG_ENTITY_NAME: "uuid",
-        COMMENT_ENTITY_NAME: "uuid",
+        LOG_ENTITY_NAME: "uuid"
     }
 
     all_fields_info = dict()
@@ -281,33 +261,13 @@ def get_all_fields_info():
     }
     all_fields_info[LOG_ENTITY_NAME] = {
          "uuid": {},
-         "time": {
-             "convert_type": "date"
-         },
+         "time": {},
          "loggername": {},
          "levelname": {},
          "objname": {},
          "objuuid": {},
          "message": {},
          "metadata": {},
-    }
-    all_fields_info[COMMENT_ENTITY_NAME] = {
-         "uuid": {},
-         "ctime": {
-             "convert_type": "date"
-         },
-         "mtime": {
-             "convert_type": "date"
-         },
-         "content": {},
-         "dbnode": {
-             "requires": NODE_ENTITY_NAME,
-             "related_name": "dbcomment"
-         },
-         "user": {
-             "requires": USER_ENTITY_NAME,
-             "related_name": "dbcomment"
-         }
     }
     return all_fields_info, unique_identifiers
 
@@ -2081,14 +2041,12 @@ def export_tree(what, folder,allowed_licenses=None, forbidden_licenses=None,
 
     # EXPORTING THE LOGS
     try:
-        import datetime, pytz
         log_entries = Log.objects.find(filters={'objuuid': {'in': all_nodes_uuids}})
         for log_entry in log_entries:
             export_data[LOG_ENTITY_NAME] = {
                 log_entry.id : {
                     "uuid": six.text_type(log_entry.uuid),
-                    "time": log_entry.time.astimezone(pytz.utc).strftime(
-                        '%Y-%m-%dT%H:%M:%S.%f'),
+                    "time": str(log_entry.time),
                     "loggername": log_entry.loggername,
                     "levelname": log_entry.levelname,
                     "objuuid": six.text_type(log_entry.objuuid),
@@ -2108,49 +2066,6 @@ def export_tree(what, folder,allowed_licenses=None, forbidden_licenses=None,
         # Hopefully, though, this should not happen!
         import traceback
         traceback.print_exc()
-
-    ##################################################
-    # Export DbComment entries outside of QueryBuilder
-    ##################################################
-    # Code adaptation from export of DbLog entries (above)
-    # I use .get because there may be no nodes to export
-    all_nodes_pk = list()
-    if NODE_ENTITY_NAME in export_data:
-        all_nodes_pk.extend(export_data.get(NODE_ENTITY_NAME).keys())
-
-    if not silent:
-        print("SAVING COMMENTS...")
-
-    # EXPORTING THE COMMENTS
-    try:
-        import datetime, pytz
-        comment_entries = Comment.objects.find(filters={'dbnode_id': {'in': all_nodes_pk}})
-        # from aiida.orm.logs import Log
-        for comment in comment_entries:
-            export_data[COMMENT_ENTITY_NAME] = {
-                comment.id : {
-                    "uuid": six.text_type(comment.uuid),
-                    "ctime": comment.ctime.astimezone(pytz.utc).strftime(
-                        '%Y-%m-%dT%H:%M:%S.%f'),
-                    "mtime": comment.mtime.astimezone(pytz.utc).strftime(
-                        '%Y-%m-%dT%H:%M:%S.%f'),
-                    "content": comment.content,
-                    "dbnode": comment.node.id,
-                    "user": comment.user.id
-                }
-            }
-
-    except ImproperlyConfigured:
-        # Probably, the logger was called without the
-        # Django settings module loaded. Then,
-        # This ignore should be a no-op.
-        pass
-    except Exception:
-        # To avoid loops with the error handler, I just print.
-        # Hopefully, though, this should not happen!
-        import traceback
-        traceback.print_exc()
-
 
     ######################################
     # Manually manage links and attributes
