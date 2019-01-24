@@ -1780,21 +1780,23 @@ class TestLinks(AiidaTestCase):
         w1.add_incoming(d1, LinkType.INPUT_WORK, 'input1')
         w1.add_incoming(d2, LinkType.INPUT_WORK, 'input2')
 
-        w2.add_incoming(d1, LinkType.INPUT_WORK, 'input')
-        w2.add_incoming(w1, LinkType.CALL_WORK, 'call')
+        w2.add_incoming(d1, LinkType.INPUT_WORK, 'input1')
+        w2.add_incoming(w1, LinkType.CALL_WORK, 'call2')
 
-        c1.add_incoming(d1, LinkType.INPUT_CALC, 'input')
-        c1.add_incoming(w2, LinkType.CALL_CALC, 'call')
+        c1.add_incoming(d1, LinkType.INPUT_CALC, 'input1')
+        c1.add_incoming(w2, LinkType.CALL_CALC, 'call1')
 
-        d3.add_incoming(c1, LinkType.CREATE, 'create1')
-        d3.add_incoming(w2, LinkType.RETURN, 'return1')
+        d3.add_incoming(c1, LinkType.CREATE, 'create3')
+        d3.add_incoming(w2, LinkType.RETURN, 'return3')
 
-        d4.add_incoming(c1, LinkType.CREATE, 'create2')
-        d4.add_incoming(w2, LinkType.RETURN, 'return2')
+        d4.add_incoming(c1, LinkType.CREATE, 'create4')
+        d4.add_incoming(w2, LinkType.RETURN, 'return4')
 
-        c2.add_incoming(d4, LinkType.INPUT_CALC, 'input')
+        c2.add_incoming(d4, LinkType.INPUT_CALC, 'input4')
 
         d5.add_incoming(c2, LinkType.CREATE, 'create5')
+        d6.add_incoming(c2, LinkType.CREATE, 'create6')
+
         graph_nodes = [d1, d2, d3, d4, d5, d6, c1, c2, w1, w2]
 
         # Create various combinations of nodes that should be exported
@@ -1937,7 +1939,7 @@ class TestLinks(AiidaTestCase):
                     str(export_node_str) + "\n" +
                     "Expected set: " + str(export_target_uuids) + "\n" +
                     "Imported set: " + str(imported_node_uuids) + "\n" +
-                    "Difference: " + str([load_node(_) for _ in
+                    "Difference: " + str([_ for _ in
                                           export_target_uuids.symmetric_difference(
                                               imported_node_uuids)])
                 )
