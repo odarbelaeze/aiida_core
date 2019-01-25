@@ -2179,18 +2179,18 @@ class TestProvenanceRedesign(AiidaTestCase):
                 # List
                 # Check value
                 self.assertEqual(list_value, refval)
-            
+
             # Check List type
             msg = "type of node ('{}') is not updated according to db schema v0.4".format(nlist.type)
             self.assertEqual(nlist.type, 'data.list.List.', msg=msg)
-            
+
         finally:
             # Deleting the created temporary folders
             shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
 
     def test_node_process_type(self):
         """ Column `process_type` added to `Node` entity DB table """
-        
+
         import os
         import shutil
         import tempfile
@@ -2230,9 +2230,9 @@ class TestProvenanceRedesign(AiidaTestCase):
             # Retrieve node and check exactly one node is imported
             qb = QueryBuilder()
             qb.append(ProcessNode, project=['uuid'])
-            
+
             self.assertEqual(qb.count(), 1)
-            
+
             # Get node uuid and check it is the same as the one exported
             nodes = qb.all()
             imported_node_uuid = str(nodes[0][0])
@@ -2241,10 +2241,61 @@ class TestProvenanceRedesign(AiidaTestCase):
 
             # Check imported node type and process type
             node = load_node(imported_node_uuid)
-            
+
             self.assertEqual(node.type, node_type)
             self.assertEqual(node.process_type, node_process_type)
-            
+
         finally:
             # Deleting the created temporary folders
             shutil.rmtree(tmp_folder, ignore_errors=True)
+
+    def test_code_type_change(self):
+        """ Code type string changed
+        Change: “code.Bool.” → “data.code.Code.”
+        """
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm import Code, QueryBuilder
+
+        # Create temporary folders for the import/export files
+        tmp_folder = tempfile.mkdtemp()
+
+        try:
+            # Create Code instance
+            code = Code()
+            code.store()
+            
+            # Save uuid and assert type
+            code_uuid = str(code.uuid)
+            code_type = code.type
+
+            self.assertEqual(code_type, "data.code.Code.")
+
+            # Export node
+            filename = os.path.join(tmp_folder, "export.tar.gz")
+            export([code], outfile=filename, silent=True)
+
+            # Clean the database and reimport
+            self.reset_database()
+            import_data(filename, silent=True)
+
+            # Check whether types are correctly imported
+            qb = QueryBuilder()
+            qb.append(Code, project=['uuid'])
+            imported_code = qb.all()
+
+            self.assertEqual(qb.count(), 1)
+
+            imported_code_uuid = str(imported_code[0][0])
+
+            self.assertEqual(imported_code_uuid, code_uuid)
+
+            imported_code_type = load_node(imported_code_uuid).type
+
+            self.assertEqual(imported_code_type, code_type)
+
+        finally:
+            # Deleting the created temporary folders
+            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
