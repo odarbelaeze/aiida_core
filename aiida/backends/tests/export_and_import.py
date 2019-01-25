@@ -2110,6 +2110,9 @@ class TestProvenanceRedesign(AiidaTestCase):
     """ Check changes in database schema after upgrading to v0.4 (Provenance Redesign)
     This includes all migrations from "base_data_plugin_type_string" (django: 0008)
     until "dbgroup_type_string_change_content" (django: 0022), both included.
+
+    The effects of the large db migration "provenance_redesign" (django: 0020)
+    is tested in `TestLinks`, since the greatest change concerns links.
     """
 
     def setUp(self):
@@ -2265,12 +2268,14 @@ class TestProvenanceRedesign(AiidaTestCase):
         try:
             # Create Code instance
             code = Code()
+            code.set_remote_computer_exec((self.computer, '/bin/true'))
             code.store()
             
-            # Save uuid and assert type
+            # Save uuid and type
             code_uuid = str(code.uuid)
             code_type = code.type
 
+            # Assert correct type exists prior to export
             self.assertEqual(code_type, "data.code.Code.")
 
             # Export node
@@ -2281,21 +2286,122 @@ class TestProvenanceRedesign(AiidaTestCase):
             self.reset_database()
             import_data(filename, silent=True)
 
-            # Check whether types are correctly imported
+            # Retrieve Code node and make sure exactly 1 is retrieved
             qb = QueryBuilder()
             qb.append(Code, project=['uuid'])
             imported_code = qb.all()
 
             self.assertEqual(qb.count(), 1)
 
+            # Check uuid is the same after import
             imported_code_uuid = str(imported_code[0][0])
 
             self.assertEqual(imported_code_uuid, code_uuid)
 
+            # Check whether types are correctly imported
             imported_code_type = load_node(imported_code_uuid).type
 
             self.assertEqual(imported_code_type, code_type)
 
         finally:
             # Deleting the created temporary folders
-            shutil.rmtree(export_file_tmp_folder, ignore_errors=True)
+            shutil.rmtree(tmp_folder, ignore_errors=True)
+
+    def test_group_name_and_type_change(self):
+        """ Group's name and type columns have changed
+        Change for columns: “name” → “label”
+                            "type" → "type_string"
+        Furthermore, type_strings have been updated to:
+            "" → "user"
+            "data.upf.family" → "data.upf"
+            "aiida.import" → "auto.import"
+            "autogroup.run" → "auto.run"
+        """
+        import os
+        import shutil
+        import tempfile
+
+        from aiida.orm import CalculationNode, Group, QueryBuilder
+        from aiida.orm.data.upf import UpfData, upload_upf_family
+        from aiida.orm import load_group
+
+        # Create temporary folders for the import/export files
+        export_tmp_folder = tempfile.mkdtemp()
+        upf_tmp_folder = tempfile.mkdtemp()
+
+        # To be saved
+        groups_label = ["Users", "UpfData"]
+        upf_filename = "Al.test_file.UPF"
+        # regular upf file version 2 header
+        upf_contents = u"\n".join([
+            "<UPF version=\"2.0.1\">",
+            "Human readable section is completely irrelevant for parsing!",
+            "<PP_HEADER",
+            "contents before element tag",
+            "element=\"Al\"",
+            "contents following element tag",
+            ">",
+        ])
+        path_to_upf = os.path.join(upf_tmp_folder, upf_filename)
+        with open(path_to_upf, 'w') as upf_file:
+            upf_file.write(upf_contents)
+
+        try:
+            # Create Groups
+            node1 = CalculationNode().store()
+            node2 = CalculationNode().store()
+            group_user = Group(label=groups_label[0]).store()
+            group_user.add_nodes([node1, node2])
+
+
+            # upf = UpfData()
+            # upf.set_file(path_to_upf)
+            # upf.store()
+            nfiles, nuploads = upload_upf_family(upf_tmp_folder, groups_label[1], "")
+            # group_upf.add_nodes(upf)
+            group_upf = load_group(groups_label[1])
+
+            # Save uuids and type
+            users_uuid = [str(u.uuid) for u in group_user.nodes]
+            upfs_uuid = [str(u.uuid) for u in group_upf.nodes]
+            groups_uuid = [str(g.uuid) for g in [group_user, group_upf]]
+            groups_type_string = [g.type_string for g in [group_user, group_upf]]
+
+            # Assert correct type strings exists prior to export
+            self.assertListEqual(groups_type_string, ["user", "data.upf"])
+
+            # Export node
+            filename = os.path.join(export_tmp_folder, "export.tar.gz")
+            export([group_user, group_upf], outfile=filename, silent=True)
+
+            # Clean the database and reimport
+            self.reset_database()
+            import_data(filename, silent=True)
+
+            # Retrieve Groups and make sure exactly 3 are retrieved (including the import group)
+            qb = QueryBuilder()
+            qb.append(Group, project=['uuid'])
+            imported_groups = qb.all()
+
+            self.assertEqual(qb.count(), 3)
+
+            # Check uuids are the same after import
+            imported_groups_uuid = [str(g[0]) for g in imported_groups]
+
+            self.assertListEqual(imported_groups_uuid[:-1], groups_uuid)  # Leave out import group
+
+            # Check whether types are correctly imported
+            imported_groups_type_string = [load_group(g).type_string for g in imported_groups_uuid]
+
+            self.assertListEqual(imported_groups_type_string[:-1], groups_type_string)  # Leave out import group
+            self.assertEqual(imported_groups_type_string[-1], "auto.import")  # Test import group here
+
+            # Assert labels are imported correctly
+            imported_groups_label = [load_group(g).label for g in imported_groups_uuid]
+
+            self.assertListEqual(imported_groups_label[:-1], groups_label)
+
+        finally:
+            # Deleting the created temporary folders
+            shutil.rmtree(export_tmp_folder, ignore_errors=True)
+            shutil.rmtree(upf_tmp_folder, ignore_errors=True)
