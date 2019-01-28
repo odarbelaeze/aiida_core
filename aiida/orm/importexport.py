@@ -112,10 +112,6 @@ def schema_to_entity_names(class_string):
             class_string == "aiida.backends.sqlalchemy.models.user.DbUser"):
         return USER_ENTITY_NAME
 
-    if (class_string == "aiida.backends.djsite.db.models.DbLog" or
-            class_string == "aiida.backends.sqlalchemy.models.log.DbLog"):
-        return LOG_ENTITY_NAME
-
 
 # Mapping of entity names to SQLA class paths
 entity_names_to_sqla_schema = {
@@ -2042,6 +2038,7 @@ def export_tree(what, folder,allowed_licenses=None, forbidden_licenses=None,
     # EXPORTING THE LOGS
     try:
         log_entries = Log.objects.find(filters={'objuuid': {'in': all_nodes_uuids}})
+        from aiida.orm.logs import Log
         for log_entry in log_entries:
             export_data[LOG_ENTITY_NAME] = {
                 log_entry.id : {
