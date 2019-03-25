@@ -77,13 +77,13 @@ deploy:
     skip_existing: true
     username: aiida-bot
     password:
-        secure: PiNB97yPEZ9MLtkNmkuPL3j08jdRCXLNCNRGwE+cfiW2eQw+k0ThqRwn51T0XAcu/8alLwAX2bflwUpaExmgR3UfPsT2mKCuc1BR9dkS+/jwlCZ+Vv4101UpI9l/LK58bW+FdSwzc5Kxt6AqUKlKdHZxOpuZZiJqpZShOgCDL/KVHSykOkywE6b92i4Zv/ziA4mwTc+rDAwzpOvG28AoA4dIa4EMnHZi6cW3YIS8e4dxFcgzvTGnfHejBziJGHEyP9FydpqibQzkmwwiUONCo3wctSDx03l4OMyFliqy9IRD+uysEJQIXEF0nakHzwcQdlo5srBNnRJACZKr/U4aWjIs9gEpXLmh/E4iCbC8cZAHn00NDHFpOhEVgJlWeDBLwo4zOjIDh4tA+RQjlcZTB/hXnv+25k7bsaGXeM11AcP9grkCpGt7YntBbawxXEby2faSHVJ78Dshn6ty0VcNGbm2DtS3L+nNX0ZDJw7MT8drOJfcZNmHLiOR8mFagHHtsm7KQMZan1GmrvDFBC2XbD0fQyLKNszzqkemOfkEzaBJl+U3ILCBojvwxs8BsSUX+2LkTaW+SqmUHOx0I3ZhdklAqHZ8VLwE8TRY+fjsY5+Zp6O56cF6nFnHsMBmzWsSAxcy+QqHrsO0dtIE4LqgW3btJeWyfgiQ7bl30+P9IXk=
+        secure: LAWil3MvA5Lu+9W1DN7To+DV3lFoH+9U2BB+eg8ikRrvTCoFvgF1tgFtE0lmRd2aH/YHbtXDEfiWCEAZPZIdphzOLrYR9WlBkrQrDPh8lzN7ClDoEiMjgwg6Pz65aSYrMTxegUfDEoIXMJqjl2o9xQ2/g13/oZu8FhkhlFl/taPsaf+Wo777HH8BXss0zsIDMgHMO29uqyg2J7sTyR8FOIMGfoESIuOIkII7AktMxNC8Ys2+PLOkoFI7eyHN1RUrsD+3mDjm8IJsnRX+B4R068cDLGfLLRxNCpEwydEjEwnm7YFa9IjxLRLKySeE5Im6USQA4LkaH/gJ/fl9jpDta81nqYK8OdVcJrO8Z9VAFNfDRW46PhxC46k3uQy7ddqQ4vAy+mKP8+B3S7qACnCnPHOvTxJ+rkrYhRN83INjJ2/7lVPkUQoscy4DiWyKK0DeBRhs5ZD2P7O/ZGB/6fA8m8ZSnzTB+hKwA+C+9/86By/r2w0xFQ/W0uI1C+uuoupSkrACqxHEsUFiS5M4Paf6EIpUUS86BGN2FsiXhsgMRKxfiGxtVIvTm8v3b7fGThLquv9jnk9j+boQyRc4cEGSy5xPYz+HumoF0OlbTEptcbQguAhIQHCHKjwjkEhrB8rK+iZquGMYPFP9a7N54RBMBySW465rMG7+ML0pHJPBTuU=
     on:
-        repo: aiidateam/aiida_core
-        branch: master
-        tags: true
+        repo: odarbelaeze/aiida_core
+        branch: automated-publishing
+        # tags: true
         # Make sure the tag is an actual semantic version
-        condition: $TRAVIS_TAG =~ '^v[0-9]+\.[0-9]+\.[0-9]+(a|b|rc)?[0-9]*$'
+        # condition: $TRAVIS_TAG =~ '^v[0-9]+\.[0-9]+\.[0-9]+(a|b|rc)?[0-9]*$'
 
 after_success:
   # upload coverage report to coveralls.io
