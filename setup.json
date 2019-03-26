@@ -1,6 +1,6 @@
 {
   "name": "aiida-core-bot",
-  "version": "1.0.0b2",
+  "version": "1.0.1b2",
   "url": "http://www.aiida.net/",
   "license": "MIT License",
   "author": "The AiiDA team",
@@ -97,7 +97,7 @@
       "qe-tools==1.1.2"
     ],
     "notebook": [
-      "jupyter==1.0.0"
+      "jupyter==1.0.1"
     ],
     "testing": [
       "unittest2==1.1.0; python_version<'3.5'",
