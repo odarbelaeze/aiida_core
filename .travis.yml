@@ -86,6 +86,7 @@ jobs:
           before_install: skip
           install: skip
           script: skip
+          addons: skip
           python: 3.6
           env: TEST_TYPE=
           deploy: &pypi
