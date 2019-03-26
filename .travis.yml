@@ -82,7 +82,6 @@ deploy:
         repo: odarbelaeze/aiida_core
         branch: automated-publishing
         tags: true
-        # Make sure the tag is an actual semantic version
         condition: "$TRAVIS_TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(a|b|rc)?[0-9]*$"
 
 after_success:
