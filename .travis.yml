@@ -5,7 +5,7 @@ language: python
 
 python:
     - "2.7"
-    # - "3.6"
+    - "3.6"
 
 cache: pip
 
@@ -61,10 +61,10 @@ env:
     ## also when building the docs
     ## because otherwise the code would complain. Also, I need latex.
     - TEST_TYPE="pre-commit"
-    # - TEST_AIIDA_BACKEND=django TEST_TYPE="docs"
-    # - TEST_AIIDA_BACKEND=django TEST_TYPE="tests"
+    - TEST_AIIDA_BACKEND=django TEST_TYPE="docs"
+    - TEST_AIIDA_BACKEND=django TEST_TYPE="tests"
     - TEST_AIIDA_BACKEND=sqlalchemy TEST_TYPE="tests"
-    # - TEST_TYPE="conda"
+    - TEST_TYPE="conda"
 
 before_script:
     - .ci/setup_profiles.sh
@@ -83,12 +83,16 @@ git:
 jobs:
     include:
         - stage: deploy
-          before_install: skip
-          install: skip
-          script: skip
           addons: skip
           python: 3.6
-          env: TEST_TYPE=
+          before_install: skip
+          install: skip
+          before_script: skip
+          script: skip
+          env: skip
+          after_deploy:
+            - echo "Deployed $GIT_TAG"
+            - echo "We'll hook up some things after the future"
           deploy: &pypi
               provider: pypi
               skip_existing: true
@@ -99,5 +103,4 @@ jobs:
                   repo: odarbelaeze/aiida_core
                   branch: automated-publishing
                   tags: true
-                  # Make sure the tag is an actual semantic version
                   condition: "$TRAVIS_TAG =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+(a|b|rc)?[0-9]*$"
