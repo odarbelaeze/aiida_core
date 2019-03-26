@@ -24,10 +24,6 @@ class TestVerdiStatus(AiidaTestCase):
     def setUp(self):
         self.cli_runner = CliRunner()
 
-
-    def test_this_should_fail_thus_the_deployment_stage_should_not_run(self):
-        self.assertFalse(True)
-
     @with_temporary_config_instance
     def test_status_1(self):
         """Test running verdi status.

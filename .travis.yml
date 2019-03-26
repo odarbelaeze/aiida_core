@@ -83,6 +83,8 @@ git:
 jobs:
     include:
         - stage: deploy
+          before_install: skip
+          install: skip
           script: skip
           python: 3.6
           env: TEST_TYPE=
