@@ -101,6 +101,6 @@ jobs:
                   secure: LAWil3MvA5Lu+9W1DN7To+DV3lFoH+9U2BB+eg8ikRrvTCoFvgF1tgFtE0lmRd2aH/YHbtXDEfiWCEAZPZIdphzOLrYR9WlBkrQrDPh8lzN7ClDoEiMjgwg6Pz65aSYrMTxegUfDEoIXMJqjl2o9xQ2/g13/oZu8FhkhlFl/taPsaf+Wo777HH8BXss0zsIDMgHMO29uqyg2J7sTyR8FOIMGfoESIuOIkII7AktMxNC8Ys2+PLOkoFI7eyHN1RUrsD+3mDjm8IJsnRX+B4R068cDLGfLLRxNCpEwydEjEwnm7YFa9IjxLRLKySeE5Im6USQA4LkaH/gJ/fl9jpDta81nqYK8OdVcJrO8Z9VAFNfDRW46PhxC46k3uQy7ddqQ4vAy+mKP8+B3S7qACnCnPHOvTxJ+rkrYhRN83INjJ2/7lVPkUQoscy4DiWyKK0DeBRhs5ZD2P7O/ZGB/6fA8m8ZSnzTB+hKwA+C+9/86By/r2w0xFQ/W0uI1C+uuoupSkrACqxHEsUFiS5M4Paf6EIpUUS86BGN2FsiXhsgMRKxfiGxtVIvTm8v3b7fGThLquv9jnk9j+boQyRc4cEGSy5xPYz+HumoF0OlbTEptcbQguAhIQHCHKjwjkEhrB8rK+iZquGMYPFP9a7N54RBMBySW465rMG7+ML0pHJPBTuU=
               on:
                   repo: odarbelaeze/aiida_core
-                  branch: automated-publishing
+                  branch: travis-last-check
                   tags: true
                   condition: "$TRAVIS_TAG =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+(a|b|rc)?[0-9]*$"
