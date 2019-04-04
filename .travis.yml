@@ -102,8 +102,8 @@ jobs:
               skip_existing: true
               username: aiida-bot
               password:
-                  secure: NhV11e1kVJaumNMb7YGENngZwa6qJjzoGWzmzqdU5BwFgpXaxbaFAk2fn+Cckrkz4MmNJaW1HaKEAhn07WsbrkjOXK7QVNK48/eagiquKbCQbyNZNjzF+C24EYQHI93y40JQcl2JaCahSqKXbYQCpLlX0Rbtob4psQH29uHRcbq4lm5t3Jmb8WckEzcDLMZX3+uPFwDJxMbbsDW+pONGF1z2/B0j+7m4beTgCepuvIEaXS97rTQj2egKYEJV+V3DbH2o2nr0+3z4lzH2FAdoAnZMlFwHfWoY3WIuYcHcwXDWyLGWQKvncaoh1sLU7gfjjup3dZ4Iq74Zp43x2eXUhbmZBp2cPN3CZpN9baE4NE6MNKeQ/erkg31qdq50OG/rjGgPKyfg5ShO3Kt1CyVbSJX5dqPxtDQblYE8TAGhHfO2O8M1kLhyWvrV5TaQuVB/IAsTkRC+t1NtdWTxaU6wdMz36O5so89oKbFljjk9744m4Ei8DCgc98WH6b96qn0VifjxGuBs6o1aqRoa8O7e29a0TwDVAwxkczgjxbXkP6okRY5IAxsr5Rsbm8urXEo874uQA8n1gGyN6+YKSbjvPbHD9RIRl9IddC6y2wKTv/1JBifNjHcLhadl7RVRPSU7vFSs2cknN+5Gkw3FgZ/jA8SoMxMLFsvHcFxchrurAkE=
+                  secure: jfeaZDbeWHbIhNQw0zY2gesJkkQyFjeaL+8z9hBR8q2qyZOAjNdq4eP26UvWLyc0cFAh/HjUGdDD2attatJ1ElBk7/20Db5u1LeXHBwxtPdFlH/VG/gv/OOXVTlrZaQcAFklvUnEBrbE47AEXev9SddPWauP26vfW9ZNw77Nl196Sxa47HFeaJus1T2ALBBf3bKgxRaPOZ7nA9cnPtyMharP+cYGfIZF3V7hhn7PqemLQscSXzE8hT66F8b3USJvUFSTxFfKRFoR8g7t+qsnf4V/FkTu+Tt+C+zLYF0hXprgnNYNJM8T4EiK7vFsPODh/UfUUP/BXI8Bx9QgGqVOr1ybxN3jLmwfjqiOeC4Un7Bqg9C3NChMB5ZKF8lwKa1vEqputT24LWUYpVY+UyQibm6LFAcZWw6mc2nLbnhme8MgCmg+wcpZj0JZCXrISJPW0g02e+U/gchn+jGGddYq2A1ENt/LK4SLPKCfkXvX+PrIPKQMEdssL16auIbB3gFF2XUfbuDXyCgD5BVBFjYV4axtobSDYBZPcfjKZP2w8oTZrWMhklbN9njvOyze8PGzVuAEF9C4JrPKDNpl6tt2u8AyETq2GOkS2a/Bw2GfVLaKCE/L2VQnzUNpuFBdMY3fh0LagsbP+3t+MQQFp2pmhWdSmoOOMLRUAwdGMDza03s=
               on:
-                  repo: aiidateam/aiida_core
-                  branch: master
+                  repo: odarbelaeze/aiida_core
+                  branch: automated-bublish-test
                   tags: true
